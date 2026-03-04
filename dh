@@ -1,0 +1,1246 @@
+-- ================================================================
+--  WDG‐World Demonic Glitch HUB  |  Basic Mode  |  v1
+-- ================================================================
+local TS  = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
+local PLS = game:GetService("Players")
+local RS  = game:GetService("RunService")
+local LGT = game:GetService("Lighting")
+local SG  = game:GetService("StarterGui")
+local DB  = game:GetService("Debris")
+
+local lp  = PLS.LocalPlayer
+local cam = workspace.CurrentCamera
+
+-- ================================================================
+--  COLORS
+-- ================================================================
+local C = {
+    red1    = Color3.fromRGB(160,  20,  20),
+    red2    = Color3.fromRGB(120,  14,  14),
+    red3    = Color3.fromRGB( 90,  10,  10),
+    dark    = Color3.fromRGB( 10,   3,   3),
+    mid     = Color3.fromRGB( 18,   5,   5),
+    panel   = Color3.fromRGB( 13,   4,   4),
+    light   = Color3.fromRGB(220, 160, 160),
+    stroke  = Color3.fromRGB( 80,  18,  18),
+    sidebar = Color3.fromRGB(  9,   2,   2),
+    green   = Color3.fromRGB( 50, 200,  80),
+    orange  = Color3.fromRGB(230, 120,  20),
+    white   = Color3.new(1, 1, 1),
+    black   = Color3.new(0, 0, 0),
+}
+
+-- ================================================================
+--  STATE
+-- ================================================================
+local T = {
+    speed    = false,
+    infJump  = false,
+    noclip   = false,
+    aimbot   = false,
+    teleport = false,
+    espBox   = false,
+}
+local SL = {
+    walkSpeed   = 50,
+    jumpPower   = 100,
+    aimbotDist  = 600,
+}
+
+-- runtime
+local origGravity   = workspace.Gravity
+local origAmbient   = LGT.Ambient
+local origBright    = LGT.Brightness
+local origShadows   = LGT.GlobalShadows
+local origClockTime = LGT.ClockTime
+
+local locking   = false
+local lockTime  = 0.20
+local espBoxObj = {}   -- [player] = {box, nameLbl}
+
+-- ================================================================
+--  UTILS
+-- ================================================================
+local function tween(obj, props, t, style, dir)
+    TS:Create(obj, TweenInfo.new(
+        t     or 0.12,
+        style or Enum.EasingStyle.Quint,
+        dir   or Enum.EasingDirection.Out
+    ), props):Play()
+end
+local function getChar() return lp.Character end
+local function getHRP()  local c = getChar(); return c and c:FindFirstChild("HumanoidRootPart") end
+local function getHum()  local c = getChar(); return c and c:FindFirstChild("Humanoid") end
+
+local conns   = {}
+local togRefs = {}
+
+-- ================================================================
+--  NOTIFICATIONS  —  Deluxe redesign
+-- ================================================================
+local NotifGui = Instance.new("ScreenGui")
+NotifGui.Name = "WDGNotif"; NotifGui.ResetOnSpawn = false
+NotifGui.IgnoreGuiInset = true; NotifGui.DisplayOrder = 1000000
+NotifGui.Parent = game.CoreGui
+
+local notifList = {}
+local N_H, N_G, N_W = 84, 8, 348
+
+local function rebuildPos()
+    for i, fr in ipairs(notifList) do
+        local ty = 18 + (i - 1) * (N_H + N_G)
+        tween(fr, {Position = UDim2.new(1, -N_W - 16, 0, ty)}, 0.26, Enum.EasingStyle.Quint)
+    end
+end
+
+--[[
+    notify(msg, col, title, icon)
+    col  : accent Color3  (default red1)
+    title: string         (default "WDG HUB")
+    icon : emoji string   (default "🩸")
+]]
+local function notify(msg, col, title, icon)
+    col   = col   or C.red1
+    title = title or "WDG HUB"
+    icon  = icon  or "🩸"
+
+    -- ── outer frame ──────────────────────────────────────────────
+    local fr = Instance.new("Frame")
+    fr.Size                 = UDim2.new(0, N_W, 0, N_H)
+    fr.Position             = UDim2.new(1, N_W + 30, 0, 18)
+    fr.BackgroundColor3     = Color3.fromRGB(8, 2, 2)
+    fr.BackgroundTransparency = 0.04
+    fr.BorderSizePixel      = 0
+    fr.ClipsDescendants     = false
+    fr.Parent               = NotifGui
+    Instance.new("UICorner", fr).CornerRadius = UDim.new(0, 13)
+
+    -- glowing outer border
+    local outerGlow = Instance.new("UIStroke", fr)
+    outerGlow.Color       = col
+    outerGlow.Thickness   = 1.6
+    outerGlow.Transparency = 0.15
+    outerGlow.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+    -- left accent stripe (redondeada)
+    local stripe = Instance.new("Frame", fr)
+    stripe.Size             = UDim2.new(0, 4, 1, -16)
+    stripe.Position         = UDim2.new(0, 6, 0, 8)
+    stripe.BackgroundColor3 = col
+    stripe.BorderSizePixel  = 0
+    Instance.new("UICorner", stripe).CornerRadius = UDim.new(1, 0)
+
+    -- icon circle background
+    local iconBg = Instance.new("Frame", fr)
+    iconBg.Size             = UDim2.new(0, 40, 0, 40)
+    iconBg.Position         = UDim2.new(0, 16, 0.5, -20)
+    iconBg.BackgroundColor3 = col
+    iconBg.BackgroundTransparency = 0.75
+    iconBg.BorderSizePixel  = 0
+    Instance.new("UICorner", iconBg).CornerRadius = UDim.new(0, 10)
+    local iconRing = Instance.new("UIStroke", iconBg)
+    iconRing.Color       = col
+    iconRing.Thickness   = 1.2
+    iconRing.Transparency = 0.35
+
+    -- icon emoji
+    local iconLbl = Instance.new("TextLabel", iconBg)
+    iconLbl.Size               = UDim2.new(1, 0, 1, 0)
+    iconLbl.BackgroundTransparency = 1
+    iconLbl.Text               = icon
+    iconLbl.Font               = Enum.Font.GothamBold
+    iconLbl.TextSize           = 20
+    iconLbl.TextColor3         = col
+    iconLbl.TextXAlignment     = Enum.TextXAlignment.Center
+    iconLbl.ZIndex             = 4
+
+    -- title label
+    local tl = Instance.new("TextLabel", fr)
+    tl.Size               = UDim2.new(1, -68, 0, 16)
+    tl.Position           = UDim2.new(0, 64, 0, 14)
+    tl.BackgroundTransparency = 1
+    tl.Text               = title
+    tl.Font               = Enum.Font.GothamBold
+    tl.TextSize           = 10
+    tl.TextColor3         = col
+    tl.TextXAlignment     = Enum.TextXAlignment.Left
+    tl.ZIndex             = 4
+    tl.TextTransparency   = 0.05
+
+    -- message label
+    local lb = Instance.new("TextLabel", fr)
+    lb.Size               = UDim2.new(1, -68, 0, 38)
+    lb.Position           = UDim2.new(0, 64, 0, 30)
+    lb.BackgroundTransparency = 1
+    lb.Text               = msg
+    lb.Font               = Enum.Font.Gotham
+    lb.TextSize           = 12
+    lb.TextColor3         = Color3.fromRGB(225, 180, 180)
+    lb.TextXAlignment     = Enum.TextXAlignment.Left
+    lb.TextWrapped        = true
+    lb.ZIndex             = 4
+
+    -- progress bar track
+    local track = Instance.new("Frame", fr)
+    track.Size             = UDim2.new(1, -8, 0, 3)
+    track.Position         = UDim2.new(0, 4, 1, -6)
+    track.BackgroundColor3 = Color3.fromRGB(30, 6, 6)
+    track.BorderSizePixel  = 0
+    Instance.new("UICorner", track).CornerRadius = UDim.new(0, 3)
+
+    -- progress bar fill
+    local bar = Instance.new("Frame", track)
+    bar.Size             = UDim2.new(1, 0, 1, 0)
+    bar.BackgroundColor3 = col
+    bar.BorderSizePixel  = 0
+    Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 3)
+
+    -- progress bar glow (overlay, same color, semi-transparent, slightly narrower)
+    local barGlow = Instance.new("Frame", track)
+    barGlow.Size             = UDim2.new(1, 0, 0.5, 0)
+    barGlow.Position         = UDim2.new(0, 0, 0, 0)
+    barGlow.BackgroundColor3 = C.white
+    barGlow.BackgroundTransparency = 0.78
+    barGlow.BorderSizePixel  = 0
+    barGlow.ZIndex           = 2
+    Instance.new("UICorner", barGlow).CornerRadius = UDim.new(0, 3)
+
+    -- ── animate in ───────────────────────────────────────────────
+    table.insert(notifList, fr)
+    tween(fr, {Position = UDim2.new(1, -N_W - 16, 0, 18)}, 0.38,
+        Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+    rebuildPos()
+
+    -- pulse border once
+    task.spawn(function()
+        task.wait(0.1)
+        tween(outerGlow, {Transparency = 0}, 0.12)
+        task.wait(0.14)
+        tween(outerGlow, {Transparency = 0.15}, 0.3)
+    end)
+
+    -- countdown + dismiss
+    task.spawn(function()
+        local dur = 4.2; local steps = 120
+        for i = steps, 0, -1 do
+            if not bar.Parent then return end
+            bar.Size     = UDim2.new(i / steps, 0, 1, 0)
+            barGlow.Size = UDim2.new(i / steps, 0, 0.5, 0)
+            task.wait(dur / steps)
+        end
+        -- fade out
+        tween(fr,       {BackgroundTransparency = 1}, 0.28)
+        tween(outerGlow,{Transparency = 1},           0.28)
+        tween(lb,       {TextTransparency = 1},       0.22)
+        tween(tl,       {TextTransparency = 1},       0.22)
+        tween(iconLbl,  {TextTransparency = 1},       0.22)
+        tween(stripe,   {BackgroundTransparency = 1}, 0.22)
+        tween(iconBg,   {BackgroundTransparency = 1}, 0.22)
+        -- slide right
+        tween(fr, {
+            Position = UDim2.new(1, N_W + 30, 0,
+                fr.AbsolutePosition.Y
+                - (NotifGui.AbsolutePosition and NotifGui.AbsolutePosition.Y or 0))
+        }, 0.30, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        task.wait(0.34)
+        for i2, f2 in ipairs(notifList) do
+            if f2 == fr then table.remove(notifList, i2); break end
+        end
+        fr:Destroy(); rebuildPos()
+    end)
+end
+
+-- convenience wrappers
+local function notifyOK(msg, title)   notify(msg, C.green,  title or "WDG HUB", "✓") end
+local function notifyWarn(msg, title) notify(msg, C.orange, title or "WDG HUB", "⚠") end
+local function notifyErr(msg, title)  notify(msg, C.red1,   title or "WDG HUB", "✕") end
+local function notifyInfo(msg, title) notify(msg, C.red1,   title or "WDG HUB", "🩸") end
+local function notifyLocked()
+    notify("🔒  This feature requires\nWDG Premium Mode", C.red3, "LOCKED", "🔒")
+end
+
+-- ================================================================
+--  WELCOME SCREEN
+-- ================================================================
+local WGui = Instance.new("ScreenGui")
+WGui.Name = "WDGWelcome"; WGui.ResetOnSpawn = false
+WGui.IgnoreGuiInset = true; WGui.DisplayOrder = 999999
+WGui.Parent = game.CoreGui
+
+local wF = Instance.new("Frame", WGui)
+wF.Size = UDim2.new(0, 430, 0, 106); wF.Position = UDim2.new(0.5, -215, 0.5, -53)
+wF.BackgroundColor3 = C.dark; wF.BorderSizePixel = 0; wF.BackgroundTransparency = 1
+Instance.new("UICorner", wF).CornerRadius = UDim.new(0, 14)
+local wSt = Instance.new("UIStroke", wF); wSt.Color = C.red1; wSt.Thickness = 1.8; wSt.Transparency = 1
+
+local wAccent = Instance.new("Frame", wF)
+wAccent.Size = UDim2.new(1, 0, 0, 3); wAccent.BackgroundColor3 = C.red1; wAccent.BorderSizePixel = 0
+wAccent.BackgroundTransparency = 1
+Instance.new("UICorner", wAccent).CornerRadius = UDim.new(0, 14)
+
+local wT = Instance.new("TextLabel", wF)
+wT.Size = UDim2.new(1, 0, 0, 44); wT.Position = UDim2.new(0, 0, 0, 10)
+wT.BackgroundTransparency = 1; wT.Text = "🩸  Welcome, Member  🩸"
+wT.Font = Enum.Font.GothamBold; wT.TextSize = 26
+wT.TextColor3 = C.red1; wT.TextTransparency = 1
+
+local wS = Instance.new("TextLabel", wF)
+wS.Size = UDim2.new(1, 0, 0, 18); wS.Position = UDim2.new(0, 0, 0, 56)
+wS.BackgroundTransparency = 1; wS.Text = "WDG‐World Demonic Glitch HUB  •  Basic Mode"
+wS.Font = Enum.Font.Gotham; wS.TextSize = 13; wS.TextColor3 = C.light; wS.TextTransparency = 1
+
+local wC = Instance.new("TextLabel", wF)
+wC.Size = UDim2.new(1, 0, 0, 14); wC.Position = UDim2.new(0, 0, 0, 80)
+wC.BackgroundTransparency = 1; wC.Text = "Created by @Waikiki833 (INFZ3rk)"
+wC.Font = Enum.Font.Gotham; wC.TextSize = 11
+wC.TextColor3 = Color3.fromRGB(160, 60, 60); wC.TextTransparency = 1
+
+tween(wF,      {BackgroundTransparency = 0.06}, 0.7)
+tween(wSt,     {Transparency = 0},              0.7)
+tween(wAccent, {BackgroundTransparency = 0},    0.7)
+tween(wT,      {TextTransparency = 0},          0.7)
+tween(wS,      {TextTransparency = 0},          0.7)
+tween(wC,      {TextTransparency = 0},          0.7)
+
+local UIReady = false
+task.delay(3.8, function()
+    tween(wF,      {BackgroundTransparency = 1}, 0.5)
+    tween(wSt,     {Transparency = 1},           0.5)
+    tween(wAccent, {BackgroundTransparency = 1}, 0.5)
+    tween(wT,      {TextTransparency = 1},       0.5)
+    tween(wS,      {TextTransparency = 1},       0.5)
+    tween(wC,      {TextTransparency = 1},       0.5)
+    task.wait(0.6); WGui:Destroy(); UIReady = true
+end)
+
+-- ================================================================
+--  MAIN SCREENGUI
+-- ================================================================
+local SGui = Instance.new("ScreenGui")
+SGui.Name = "WDGHub"; SGui.ResetOnSpawn = false
+SGui.IgnoreGuiInset = true; SGui.DisplayOrder = 999998
+SGui.Parent = game.CoreGui
+
+-- ================================================================
+--  MAIN FRAME
+-- ================================================================
+local MF = Instance.new("Frame", SGui)
+MF.Size = UDim2.new(0, 650, 0, 450); MF.Position = UDim2.new(0.5, -325, 0.5, -225)
+MF.BackgroundColor3 = C.dark; MF.BorderSizePixel = 0; MF.Visible = false
+MF.ClipsDescendants = false
+Instance.new("UICorner", MF).CornerRadius = UDim.new(0, 12)
+local MFst = Instance.new("UIStroke", MF); MFst.Color = C.stroke; MFst.Thickness = 1.5
+
+local Glow = Instance.new("ImageLabel", MF)
+Glow.AnchorPoint = Vector2.new(0.5, 0.5); Glow.Position = UDim2.new(0.5, 0, 0.5, 0)
+Glow.Size = UDim2.new(1, 80, 1, 80); Glow.BackgroundTransparency = 1
+Glow.Image = "rbxassetid://4996891970"; Glow.ImageColor3 = C.red2
+Glow.ImageTransparency = 0.88; Glow.ZIndex = 0; Glow.Visible = false
+
+-- ================================================================
+--  TOP BAR
+-- ================================================================
+local TB = Instance.new("Frame", MF)
+TB.Size = UDim2.new(1, 0, 0, 46); TB.BackgroundColor3 = C.mid
+TB.BorderSizePixel = 0; TB.ZIndex = 5
+Instance.new("UICorner", TB).CornerRadius = UDim.new(0, 12)
+
+local AvRing = Instance.new("Frame", TB)
+AvRing.Size = UDim2.new(0, 38, 0, 38); AvRing.Position = UDim2.new(0, 5, 0, 4)
+AvRing.BackgroundColor3 = C.red1; AvRing.BorderSizePixel = 0; AvRing.ZIndex = 7
+Instance.new("UICorner", AvRing).CornerRadius = UDim.new(1, 0)
+local AvImg = Instance.new("ImageLabel", AvRing)
+AvImg.Size = UDim2.new(1, -4, 1, -4); AvImg.Position = UDim2.new(0, 2, 0, 2)
+AvImg.BackgroundColor3 = Color3.fromRGB(14, 3, 3); AvImg.BorderSizePixel = 0
+AvImg.ZIndex = 8; AvImg.ScaleType = Enum.ScaleType.Crop
+Instance.new("UICorner", AvImg).CornerRadius = UDim.new(1, 0)
+local Dot = Instance.new("Frame", AvRing)
+Dot.Size = UDim2.new(0, 11, 0, 11); Dot.Position = UDim2.new(1, -11, 1, -11)
+Dot.BackgroundColor3 = Color3.fromRGB(50, 220, 80); Dot.BorderSizePixel = 0; Dot.ZIndex = 9
+Instance.new("UICorner", Dot).CornerRadius = UDim.new(1, 0)
+Instance.new("UIStroke", Dot).Color = C.dark
+
+task.spawn(function()
+    local ok, url = pcall(function()
+        return PLS:GetUserThumbnailAsync(lp.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+    end)
+    if ok and url then AvImg.Image = url end
+end)
+
+local NameLb = Instance.new("TextLabel", TB)
+NameLb.Size = UDim2.new(0, 270, 0, 22); NameLb.Position = UDim2.new(0, 50, 0, 4)
+NameLb.BackgroundTransparency = 1; NameLb.Text = lp.Name
+NameLb.Font = Enum.Font.GothamBold; NameLb.TextSize = 15
+NameLb.TextColor3 = C.red1; NameLb.TextXAlignment = Enum.TextXAlignment.Left; NameLb.ZIndex = 6
+local SubLb = Instance.new("TextLabel", TB)
+SubLb.Size = UDim2.new(0, 370, 0, 16); SubLb.Position = UDim2.new(0, 50, 0, 26)
+SubLb.BackgroundTransparency = 1
+SubLb.Text = "🩸  WDG‐World Demonic Glitch HUB  •  Basic Mode"
+SubLb.Font = Enum.Font.Gotham; SubLb.TextSize = 10
+SubLb.TextColor3 = Color3.fromRGB(140, 60, 60)
+SubLb.TextXAlignment = Enum.TextXAlignment.Left; SubLb.ZIndex = 6
+
+local function mkTopBtn(text, bgCol, txtCol, offX)
+    local b = Instance.new("TextButton", TB)
+    b.Size = UDim2.new(0, 32, 0, 32); b.Position = UDim2.new(1, offX, 0, 7)
+    b.BackgroundColor3 = bgCol; b.Text = text
+    b.Font = Enum.Font.GothamBold; b.TextSize = 15
+    b.TextColor3 = txtCol; b.BorderSizePixel = 0; b.ZIndex = 10
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+    local og = bgCol
+    b.MouseEnter:Connect(function() tween(b, {BackgroundColor3 = Color3.new(math.min(og.R + .12, 1), math.min(og.G + .06, 1), math.min(og.B + .06, 1))}, 0.1) end)
+    b.MouseLeave:Connect(function() tween(b, {BackgroundColor3 = og}, 0.1) end)
+    return b
+end
+local MinBtn   = mkTopBtn("—", Color3.fromRGB(28,6,6),  C.red1,                      -116)
+local MaxBtn   = mkTopBtn("□", Color3.fromRGB(28,6,6),  C.red1,                       -80)
+local CloseBtn = mkTopBtn("X", Color3.fromRGB(55,8,8),  Color3.fromRGB(255,80,80),    -42)
+
+-- ================================================================
+--  SIDEBAR
+-- ================================================================
+local SB = Instance.new("Frame", MF)
+SB.Size = UDim2.new(0, 128, 1, -46); SB.Position = UDim2.new(0, 0, 0, 46)
+SB.BackgroundColor3 = C.sidebar; SB.BorderSizePixel = 0; SB.ZIndex = 4
+Instance.new("UICorner", SB).CornerRadius = UDim.new(0, 12)
+local SBlay = Instance.new("UIListLayout", SB)
+SBlay.Padding = UDim.new(0, 3); SBlay.HorizontalAlignment = Enum.HorizontalAlignment.Center
+SBlay.VerticalAlignment = Enum.VerticalAlignment.Top
+local SBpad = Instance.new("UIPadding", SB); SBpad.PaddingTop = UDim.new(0, 8)
+
+-- ================================================================
+--  CONTENT AREA
+-- ================================================================
+local CA = Instance.new("Frame", MF)
+CA.Size = UDim2.new(1, -128, 1, -46); CA.Position = UDim2.new(0, 128, 0, 46)
+CA.BackgroundColor3 = C.panel; CA.BorderSizePixel = 0; CA.ClipsDescendants = true
+Instance.new("UICorner", CA).CornerRadius = UDim.new(0, 10)
+
+local SecT = Instance.new("TextLabel", CA)
+SecT.Size = UDim2.new(1, -16, 0, 30); SecT.Position = UDim2.new(0, 12, 0, 7)
+SecT.BackgroundTransparency = 1; SecT.Text = "Home"
+SecT.Font = Enum.Font.GothamBold; SecT.TextSize = 19
+SecT.TextColor3 = C.red1; SecT.TextXAlignment = Enum.TextXAlignment.Left; SecT.ZIndex = 3
+
+local DivL = Instance.new("Frame", CA)
+DivL.Size = UDim2.new(1, -16, 0, 1); DivL.Position = UDim2.new(0, 8, 0, 39)
+DivL.BackgroundColor3 = C.stroke; DivL.BorderSizePixel = 0
+
+local Scroll = Instance.new("ScrollingFrame", CA)
+Scroll.Size = UDim2.new(1, 0, 1, -44); Scroll.Position = UDim2.new(0, 0, 0, 44)
+Scroll.BackgroundTransparency = 1; Scroll.BorderSizePixel = 0
+Scroll.ScrollBarThickness = 4; Scroll.ScrollBarImageColor3 = C.red2
+Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+Scroll.ScrollingDirection = Enum.ScrollingDirection.Y; Scroll.ZIndex = 2
+
+-- ================================================================
+--  RESIZE HANDLE  —  L-shape, flush bottom-right
+-- ================================================================
+local RH = Instance.new("Frame", MF)
+RH.Size = UDim2.new(0, 26, 0, 26)
+RH.AnchorPoint = Vector2.new(1, 1); RH.Position = UDim2.new(1, 0, 1, 0)
+RH.BackgroundTransparency = 1; RH.BorderSizePixel = 0; RH.ZIndex = 30; RH.Active = true
+local armV = Instance.new("Frame", RH)
+armV.AnchorPoint = Vector2.new(1, 1); armV.Size = UDim2.new(0, 5, 1, 0); armV.Position = UDim2.new(1, 0, 1, 0)
+armV.BackgroundColor3 = C.red1; armV.BorderSizePixel = 0; armV.ZIndex = 31
+Instance.new("UICorner", armV).CornerRadius = UDim.new(0, 3)
+local armH = Instance.new("Frame", RH)
+armH.AnchorPoint = Vector2.new(1, 1); armH.Size = UDim2.new(1, 0, 0, 5); armH.Position = UDim2.new(1, 0, 1, 0)
+armH.BackgroundColor3 = C.red1; armH.BorderSizePixel = 0; armH.ZIndex = 31
+Instance.new("UICorner", armH).CornerRadius = UDim.new(0, 3)
+RH.MouseEnter:Connect(function() tween(armV, {BackgroundColor3 = C.white}, 0.1); tween(armH, {BackgroundColor3 = C.white}, 0.1) end)
+RH.MouseLeave:Connect(function() tween(armV, {BackgroundColor3 = C.red1},  0.1); tween(armH, {BackgroundColor3 = C.red1},  0.1) end)
+
+-- ================================================================
+--  TAB SYSTEM
+-- ================================================================
+local tabF = {} local tabB = {} local curTab = ""
+local TABS = {
+    {n="Home",     i="🏠"},
+    {n="Movement", i="🏃"},
+    {n="Combat",   i="⚔️"},
+    {n="Visuals",  i="👁"},
+    {n="Player",   i="🧍"},
+    {n="World",    i="🌍"},
+    {n="Extras",   i="🎮"},
+    {n="Config",   i="⚙️"},
+}
+
+local function mkTab(name)
+    if tabF[name] then return tabF[name] end
+    local f = Instance.new("Frame", Scroll)
+    f.Size = UDim2.new(1, 0, 1, 0); f.BackgroundTransparency = 1; f.Visible = false; f.ZIndex = 2
+    local lay = Instance.new("UIListLayout", f)
+    lay.Padding = UDim.new(0, 6); lay.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    lay.SortOrder = Enum.SortOrder.LayoutOrder
+    local pad = Instance.new("UIPadding", f)
+    pad.PaddingTop = UDim.new(0, 8); pad.PaddingLeft = UDim.new(0, 8)
+    pad.PaddingRight = UDim.new(0, 8); pad.PaddingBottom = UDim.new(0, 14)
+    tabF[name] = f; return f
+end
+
+local function refreshCanvas(name)
+    local f = tabF[name]; if not f then return end
+    local lay = f:FindFirstChildOfClass("UIListLayout")
+    if lay then Scroll.CanvasSize = UDim2.new(0, 0, 0, lay.AbsoluteContentSize.Y + 26) end
+end
+
+local function switchTab(name)
+    curTab = name; SecT.Text = name
+    for n, f in pairs(tabF) do f.Visible = (n == name) end
+    for n, b in pairs(tabB) do
+        local a = (n == name)
+        tween(b, {BackgroundColor3 = a and C.red1 or Color3.fromRGB(18, 5, 5),
+                  TextColor3       = a and C.black or C.light}, 0.13)
+    end
+    Scroll.CanvasPosition = Vector2.new(0, 0)
+    task.wait(); refreshCanvas(name)
+end
+
+for _, t in ipairs(TABS) do
+    mkTab(t.n)
+    local b = Instance.new("TextButton", SB)
+    b.Size = UDim2.new(1, -8, 0, 32); b.BackgroundColor3 = Color3.fromRGB(18, 5, 5)
+    b.Text = t.i .. "  " .. t.n; b.Font = Enum.Font.Gotham; b.TextSize = 11
+    b.TextColor3 = C.light; b.TextXAlignment = Enum.TextXAlignment.Left
+    b.BorderSizePixel = 0; b.ZIndex = 5
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+    local bp = Instance.new("UIPadding", b); bp.PaddingLeft = UDim.new(0, 8)
+    local n = t.n
+    b.MouseEnter:Connect(function() if curTab ~= n then tween(b, {BackgroundColor3 = Color3.fromRGB(30, 8, 8)}, 0.1) end end)
+    b.MouseLeave:Connect(function() if curTab ~= n then tween(b, {BackgroundColor3 = Color3.fromRGB(18, 5, 5)}, 0.1) end end)
+    b.MouseButton1Click:Connect(function() switchTab(n) end)
+    tabB[n] = b
+end
+
+-- ================================================================
+--  UI BUILDERS
+-- ================================================================
+local function sec(parent, text)
+    local w = Instance.new("Frame", parent)
+    w.Size = UDim2.new(1, 0, 0, 20); w.BackgroundTransparency = 1
+    local lb = Instance.new("TextLabel", w)
+    lb.Size = UDim2.new(1, 0, 1, 0); lb.BackgroundTransparency = 1
+    lb.Text = "▸  " .. text:upper(); lb.Font = Enum.Font.GothamBold; lb.TextSize = 10
+    lb.TextColor3 = Color3.fromRGB(150, 45, 45); lb.TextXAlignment = Enum.TextXAlignment.Left; lb.ZIndex = 3
+    local li = Instance.new("Frame", w)
+    li.Size = UDim2.new(0.5, 0, 0, 1); li.Position = UDim2.new(0, 0, 1, -1)
+    li.BackgroundColor3 = C.stroke; li.BorderSizePixel = 0
+end
+
+--[[
+    tog(parent, label, stateKey, onCB, offCB, keyLabel)
+    keyLabel: optional string like "Q" or "Z" shown as a key badge
+    NOTA: Las notificaciones SOLO se muestran al pulsar el pill ON/OFF,
+          NO cuando se activa/desactiva via keybind.
+]]
+local function tog(parent, label, stateKey, onCB, offCB, keyLabel)
+    local row = Instance.new("Frame", parent)
+    row.Size = UDim2.new(1, 0, 0, 42); row.BackgroundColor3 = Color3.fromRGB(15, 4, 4)
+    row.BorderSizePixel = 0; row.ZIndex = 3
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+    local rs = Instance.new("UIStroke", row); rs.Color = Color3.fromRGB(35, 10, 10); rs.Thickness = 1; rs.Transparency = 0.4
+
+    -- label
+    local lb = Instance.new("TextLabel", row)
+    lb.BackgroundTransparency = 1
+    lb.Font = Enum.Font.Gotham; lb.TextSize = 12.5
+    lb.TextColor3 = C.light; lb.TextXAlignment = Enum.TextXAlignment.Left; lb.ZIndex = 4
+
+    -- toggle pill
+    local pill = Instance.new("TextButton", row)
+    pill.Size = UDim2.new(0, 54, 0, 26); pill.Position = UDim2.new(1, -62, 0.5, -13)
+    pill.BackgroundColor3 = Color3.fromRGB(32, 8, 8); pill.Text = "OFF"
+    pill.Font = Enum.Font.GothamBold; pill.TextSize = 11
+    pill.TextColor3 = Color3.fromRGB(100, 40, 40); pill.BorderSizePixel = 0; pill.ZIndex = 4
+    Instance.new("UICorner", pill).CornerRadius = UDim.new(0, 6)
+
+    if keyLabel then
+        lb.Size = UDim2.new(1, -160, 1, 0); lb.Position = UDim2.new(0, 10, 0, 0)
+        lb.Text = label
+        local kb = Instance.new("Frame", row)
+        kb.Size = UDim2.new(0, 36, 0, 24); kb.Position = UDim2.new(1, -104, 0.5, -12)
+        kb.BackgroundColor3 = Color3.fromRGB(22, 5, 5); kb.BorderSizePixel = 0; kb.ZIndex = 4
+        Instance.new("UICorner", kb).CornerRadius = UDim.new(0, 5)
+        local kbSt = Instance.new("UIStroke", kb); kbSt.Color = C.red1; kbSt.Thickness = 1.2; kbSt.Transparency = 0.3
+        local kl = Instance.new("TextLabel", kb)
+        kl.Size = UDim2.new(1, 0, 1, 0); kl.BackgroundTransparency = 1
+        kl.Text = keyLabel; kl.Font = Enum.Font.GothamBold; kl.TextSize = 12
+        kl.TextColor3 = C.red1; kl.TextXAlignment = Enum.TextXAlignment.Center; kl.ZIndex = 5
+    else
+        lb.Size = UDim2.new(1, -80, 1, 0); lb.Position = UDim2.new(0, 10, 0, 0)
+        lb.Text = label
+    end
+
+    local state = false
+
+    -- setState con flag: showNotif controla si se muestra la notif
+    -- Si showNotif es false (por keybind), solo cambia el estado visual, sin notify
+    local function setState(v, showNotif)
+        state = v
+        if showNotif == nil then showNotif = true end  -- default: true (pill click siempre notifica)
+        if stateKey then T[stateKey] = v end
+        if v then
+            tween(pill, {BackgroundColor3 = C.red1, TextColor3 = C.white}, 0.13); pill.Text = "ON"
+            if onCB then onCB(showNotif) end
+        else
+            tween(pill, {BackgroundColor3 = Color3.fromRGB(32, 8, 8), TextColor3 = Color3.fromRGB(100, 40, 40)}, 0.13); pill.Text = "OFF"
+            if offCB then offCB(showNotif) end
+        end
+    end
+
+    -- Pill click: SIEMPRE muestra notificación
+    pill.MouseButton1Click:Connect(function() setState(not state, true) end)
+
+    if stateKey then
+        togRefs[stateKey] = {setState = setState, getState = function() return state end}
+    end
+    return row, setState
+end
+
+-- Locked row
+local function locked(parent, label)
+    local row = Instance.new("Frame", parent)
+    row.Size = UDim2.new(1, 0, 0, 42); row.BackgroundColor3 = Color3.fromRGB(11, 3, 3)
+    row.BorderSizePixel = 0; row.ZIndex = 3; row.Active = true
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+    local rs = Instance.new("UIStroke", row); rs.Color = Color3.fromRGB(25, 8, 8); rs.Thickness = 1; rs.Transparency = 0.6
+    local lb = Instance.new("TextLabel", row)
+    lb.Size = UDim2.new(1, -110, 1, 0); lb.Position = UDim2.new(0, 10, 0, 0)
+    lb.BackgroundTransparency = 1; lb.Text = label
+    lb.Font = Enum.Font.Gotham; lb.TextSize = 12.5
+    lb.TextColor3 = Color3.fromRGB(70, 25, 25); lb.TextXAlignment = Enum.TextXAlignment.Left; lb.ZIndex = 4
+    local badge = Instance.new("TextLabel", row)
+    badge.Size = UDim2.new(0, 92, 0, 22); badge.Position = UDim2.new(1, -100, 0.5, -11)
+    badge.BackgroundColor3 = Color3.fromRGB(18, 4, 4)
+    badge.Text = "🔒  PREMIUM"; badge.Font = Enum.Font.GothamBold; badge.TextSize = 9
+    badge.TextColor3 = Color3.fromRGB(100, 30, 30); badge.BorderSizePixel = 0; badge.ZIndex = 4
+    Instance.new("UICorner", badge).CornerRadius = UDim.new(0, 5)
+    local bst = Instance.new("UIStroke", badge); bst.Color = Color3.fromRGB(55, 14, 14); bst.Thickness = 1; bst.Transparency = 0.4
+    local cz = Instance.new("TextButton", row)
+    cz.Size = UDim2.new(1, 0, 1, 0); cz.BackgroundTransparency = 1; cz.Text = ""; cz.ZIndex = 5
+    cz.MouseButton1Click:Connect(notifyLocked)
+    cz.MouseEnter:Connect(function() tween(row, {BackgroundColor3 = Color3.fromRGB(14, 4, 4)}, 0.1) end)
+    cz.MouseLeave:Connect(function() tween(row, {BackgroundColor3 = Color3.fromRGB(11, 3, 3)}, 0.1) end)
+end
+
+-- Slider
+local function sld(parent, label, mn, mx, def, cb)
+    local row = Instance.new("Frame", parent)
+    row.Size = UDim2.new(1, 0, 0, 56); row.BackgroundColor3 = Color3.fromRGB(15, 4, 4)
+    row.BorderSizePixel = 0; row.ZIndex = 3
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+    Instance.new("UIStroke", row).Color = Color3.fromRGB(35, 10, 10)
+    local lb = Instance.new("TextLabel", row)
+    lb.Size = UDim2.new(1, -10, 0, 22); lb.Position = UDim2.new(0, 10, 0, 4)
+    lb.BackgroundTransparency = 1; lb.Text = label .. ":  " .. tostring(def)
+    lb.Font = Enum.Font.Gotham; lb.TextSize = 12; lb.TextColor3 = C.light
+    lb.TextXAlignment = Enum.TextXAlignment.Left; lb.ZIndex = 4
+    local tr = Instance.new("Frame", row)
+    tr.Size = UDim2.new(1, -20, 0, 8); tr.Position = UDim2.new(0, 10, 0, 36)
+    tr.BackgroundColor3 = Color3.fromRGB(26, 6, 6); tr.BorderSizePixel = 0; tr.ZIndex = 4
+    Instance.new("UICorner", tr).CornerRadius = UDim.new(0, 4)
+    local fl = Instance.new("Frame", tr)
+    fl.Size = UDim2.new((def - mn) / (mx - mn), 0, 1, 0); fl.BackgroundColor3 = C.red1
+    fl.BorderSizePixel = 0; fl.ZIndex = 5
+    Instance.new("UICorner", fl).CornerRadius = UDim.new(0, 4)
+    local hd = Instance.new("Frame", fl)
+    hd.Size = UDim2.new(0, 14, 0, 14); hd.AnchorPoint = Vector2.new(0.5, 0.5)
+    hd.Position = UDim2.new(1, 0, 0.5, 0); hd.BackgroundColor3 = C.white
+    hd.BorderSizePixel = 0; hd.ZIndex = 6
+    Instance.new("UICorner", hd).CornerRadius = UDim.new(1, 0)
+    local drag = false
+    local function upd(x)
+        local pct = math.clamp((x - tr.AbsolutePosition.X) / tr.AbsoluteSize.X, 0, 1)
+        local val = math.floor(mn + pct * (mx - mn))
+        fl.Size = UDim2.new(pct, 0, 1, 0); lb.Text = label .. ":  " .. tostring(val)
+        if cb then cb(val) end
+    end
+    tr.InputBegan:Connect(function(i)  if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = true;  upd(i.Position.X) end end)
+    tr.InputEnded:Connect(function(i)  if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false end end)
+    local sc = UIS.InputChanged:Connect(function(i)
+        if drag and i.UserInputType == Enum.UserInputType.MouseMovement then upd(i.Position.X) end
+    end)
+    table.insert(conns, sc)
+end
+
+-- Button
+local function btn(parent, text, col, cb)
+    col = col or Color3.fromRGB(28, 6, 6)
+    local b = Instance.new("TextButton", parent)
+    b.Size = UDim2.new(1, 0, 0, 36); b.BackgroundColor3 = col; b.Text = text
+    b.Font = Enum.Font.GothamBold; b.TextSize = 12.5; b.TextColor3 = C.white
+    b.BorderSizePixel = 0; b.ZIndex = 3
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+    local og = col
+    b.MouseEnter:Connect(function() tween(b, {BackgroundColor3 = Color3.new(math.min(og.R + .1, 1), math.min(og.G + .05, 1), math.min(og.B + .05, 1))}, 0.1) end)
+    b.MouseLeave:Connect(function() tween(b, {BackgroundColor3 = og}, 0.1) end)
+    b.MouseButton1Click:Connect(cb); return b
+end
+
+-- Info box
+local function inf(parent, text, h)
+    h = h or 44
+    local lb = Instance.new("TextLabel", parent)
+    lb.Size = UDim2.new(1, 0, 0, h); lb.BackgroundColor3 = Color3.fromRGB(13, 3, 3)
+    lb.Text = text; lb.Font = Enum.Font.Gotham; lb.TextSize = 12
+    lb.TextColor3 = Color3.fromRGB(200, 120, 120); lb.TextWrapped = true
+    lb.BorderSizePixel = 0; lb.TextXAlignment = Enum.TextXAlignment.Left; lb.ZIndex = 3
+    Instance.new("UICorner", lb).CornerRadius = UDim.new(0, 8)
+    local p = Instance.new("UIPadding", lb); p.PaddingLeft = UDim.new(0, 10); p.PaddingRight = UDim.new(0, 10)
+end
+
+-- Grid + stat card
+local function grid(parent)
+    local g = Instance.new("Frame", parent)
+    g.Size = UDim2.new(1, 0, 0, 54); g.BackgroundTransparency = 1; g.ZIndex = 3
+    local l = Instance.new("UIListLayout", g)
+    l.FillDirection = Enum.FillDirection.Horizontal; l.Padding = UDim.new(0, 6)
+    l.HorizontalAlignment = Enum.HorizontalAlignment.Left; l.SortOrder = Enum.SortOrder.LayoutOrder
+    return g
+end
+local function card(parent, title, val)
+    local c = Instance.new("Frame", parent)
+    c.Size = UDim2.new(0.48, 0, 0, 54); c.BackgroundColor3 = Color3.fromRGB(17, 4, 4)
+    c.BorderSizePixel = 0; c.ZIndex = 3
+    Instance.new("UICorner", c).CornerRadius = UDim.new(0, 8)
+    Instance.new("UIStroke", c).Color = Color3.fromRGB(50, 14, 14)
+    local t = Instance.new("TextLabel", c)
+    t.Size = UDim2.new(1, -8, 0, 18); t.Position = UDim2.new(0, 8, 0, 4)
+    t.BackgroundTransparency = 1; t.Text = title; t.Font = Enum.Font.Gotham; t.TextSize = 10
+    t.TextColor3 = Color3.fromRGB(130, 55, 55); t.TextXAlignment = Enum.TextXAlignment.Left; t.ZIndex = 4
+    local v = Instance.new("TextLabel", c)
+    v.Size = UDim2.new(1, -8, 0, 22); v.Position = UDim2.new(0, 8, 0, 24)
+    v.BackgroundTransparency = 1; v.Text = val; v.Font = Enum.Font.GothamBold; v.TextSize = 13
+    v.TextColor3 = C.red1; v.TextXAlignment = Enum.TextXAlignment.Left; v.ZIndex = 4
+    return c, v
+end
+
+-- ================================================================
+--  HOME
+-- ================================================================
+do
+    local f = mkTab("Home")
+    sec(f, "Welcome")
+    inf(f, "🩸  WDG‐World Demonic Glitch HUB  —  Basic Mode\nWelcome, Member. Use the tabs on the left to navigate.", 44)
+    sec(f, "HUB Information")
+    inf(f, "🛠️  Created by: @Waikiki833 (INFZ3rk)\n📌  Version: 1.0  •  Mode: Basic\n🔒  Upgrade to Premium to unlock all features.", 52)
+    sec(f, "Controls")
+    inf(f, "[ M ] Open/Close   •   [ Q ] Aimbot   •   [ Z ] Teleport\n[ — ] Minimize   •   [ □ ] Maximize   •   [ X ] Hide\nBottom-right L corner = Resize", 52)
+    sec(f, "Live Statistics")
+    local g1 = grid(f)
+    local _, vFPS  = card(g1, "FPS",      "...")
+    local _, vPing = card(g1, "Ping",     "...")
+    local g2 = grid(f)
+    local _, vPlrs = card(g2, "Players",  tostring(#PLS:GetPlayers()))
+    local _, vUID  = card(g2, "UserID",   tostring(lp.UserId))
+    local g3 = grid(f)
+    local _, vPos  = card(g3, "Position", "...")
+    local _, vGID  = card(g3, "PlaceId",  tostring(game.PlaceId))
+    local fc = RS.RenderStepped:Connect(function(dt) vFPS.Text = tostring(math.floor(1 / dt)) .. " fps" end)
+    table.insert(conns, fc)
+    task.spawn(function()
+        while SGui and SGui.Parent do
+            task.wait(2)
+            vPlrs.Text = tostring(#PLS:GetPlayers())
+            local hrp = getHRP()
+            if hrp then local p = hrp.Position; vPos.Text = string.format("%.0f, %.0f, %.0f", p.X, p.Y, p.Z) end
+            local ok, pg = pcall(function() return math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+            if ok then vPing.Text = tostring(pg) .. " ms" end
+        end
+    end)
+    sec(f, "Quick Actions")
+    btn(f, "📋  Copy UserID",        Color3.fromRGB(28,6,6), function() pcall(function() setclipboard(tostring(lp.UserId)) end); notifyInfo("UserID copied: " .. lp.UserId) end)
+    btn(f, "📍  Show position",      Color3.fromRGB(28,6,6), function()
+        local hrp = getHRP(); if hrp then notifyInfo(string.format("X: %.1f   Y: %.1f   Z: %.1f", hrp.Position.X, hrp.Position.Y, hrp.Position.Z)) end
+    end)
+    btn(f, "📊  Server info",        Color3.fromRGB(28,6,6), function()
+        local jid = game.JobId ~= "" and game.JobId:sub(1, 18) .. "..." or "N/A"
+        notifyInfo("Players: " .. #PLS:GetPlayers() .. "   |   Job: " .. jid)
+    end)
+    btn(f, "🌐  Copy game link",     Color3.fromRGB(28,6,6), function() pcall(function() setclipboard("https://www.roblox.com/games/" .. tostring(game.PlaceId)) end); notifyOK("Game link copied!") end)
+    btn(f, "⏱️  Session time",       Color3.fromRGB(28,6,6), function() notifyInfo("Session: " .. tostring(math.floor(tick())) .. "s since server start") end)
+end
+
+-- ================================================================
+--  MOVEMENT
+-- ================================================================
+do
+    local f = mkTab("Movement")
+    sec(f, "Speed")
+    sld(f, "WalkSpeed", 16, 200, 50, function(v) SL.walkSpeed = v; if T.speed then local h = getHum(); if h then h.WalkSpeed = v end end end)
+    tog(f, "Speed Hack", "speed",
+        function(sn) if sn then notifyOK("Speed ON  (" .. SL.walkSpeed .. ")") end; local h = getHum(); if h then h.WalkSpeed = SL.walkSpeed end end,
+        function(sn) if sn then notifyErr("Speed OFF") end; local h = getHum(); if h then h.WalkSpeed = 16 end end
+    )
+    sec(f, "Jump")
+    sld(f, "Jump Power", 50, 300, 100, function(v) SL.jumpPower = v; if T.infJump then local h = getHum(); if h then h.JumpPower = v end end end)
+    tog(f, "Infinite Jump", "infJump",
+        function(sn) if sn then notifyOK("Infinite Jump ON") end; local h = getHum(); if h then h.JumpPower = SL.jumpPower end end,
+        function(sn) if sn then notifyErr("Infinite Jump OFF") end; local h = getHum(); if h then h.JumpPower = 50 end end
+    )
+    sec(f, "No Clip & Teleport")
+    inf(f, "No Clip lets you pass through walls. Teleport: enable toggle then press Z.", 36)
+    tog(f, "No Clip", "noclip",
+        function(sn) if sn then notifyOK("No Clip ON  —  passing through walls") end end,
+        function(sn)
+            local c = getChar(); if c then for _, p in pairs(c:GetDescendants()) do if p:IsA("BasePart") then pcall(function() p.CanCollide = true end) end end end
+            if sn then notifyErr("No Clip OFF") end
+        end
+    )
+    tog(f, "Teleport to Cursor", "teleport",
+        function(sn) if sn then notifyOK("Teleport ON  —  press  [ Z ]  to warp") end end,
+        function(sn) if sn then notifyErr("Teleport OFF") end end,
+        "Z"
+    )
+    sec(f, "Premium Features")
+    locked(f, "Fly")
+    locked(f, "SpinBot")
+    locked(f, "Bunny Hop")
+    locked(f, "Long Jump")
+    locked(f, "Launch into Air")
+    locked(f, "Gravity Control")
+end
+
+-- ================================================================
+--  COMBAT
+-- ================================================================
+do
+    local f = mkTab("Combat")
+    sec(f, "Aimbot")
+    inf(f, "Hold  [ Q ]  to lock your camera onto the nearest visible player. Release to unlock.", 36)
+    sld(f, "Max Distance (px)", 100, 1200, 600, function(v) SL.aimbotDist = v end)
+    tog(f, "Aimbot", "aimbot",
+        function(sn) if sn then notifyOK("Aimbot ON  —  hold  [ Q ]  to lock") end end,
+        function(sn) if sn then notifyErr("Aimbot OFF") end end,
+        "Q"
+    )
+    sec(f, "Basic Actions")
+    btn(f, "💥  Ragdoll self", Color3.fromRGB(28,6,6), function()
+        local char = getChar(); if not char then return end
+        for _, j in pairs(char:GetDescendants()) do
+            if j:IsA("Motor6D") then
+                local a1 = Instance.new("Attachment", j.Part0); local a2 = Instance.new("Attachment", j.Part1)
+                a1.CFrame = j.C0; a2.CFrame = j.C1
+                local bc = Instance.new("BallSocketConstraint", j.Part0); bc.Attachment0 = a1; bc.Attachment1 = a2; j.Enabled = false
+            end
+        end
+        notifyWarn("Ragdoll activated!")
+    end)
+    btn(f, "🔄  Reset character", Color3.fromRGB(28,6,6), function()
+        local h = getHum(); if h then h.Health = 0; notifyInfo("Character reset") end
+    end)
+    sec(f, "Premium Features")
+    locked(f, "Hitbox Expand")
+    locked(f, "God Mode  (Infinite HP)")
+    locked(f, "Auto Heal")
+    locked(f, "Anti-Ragdoll")
+    locked(f, "Auto Respawn")
+end
+
+-- ================================================================
+--  VISUALS
+-- ================================================================
+do
+    local f = mkTab("Visuals")
+    sec(f, "ESP  —  Box")
+    inf(f, "Draws a box around every player in your view. Requires Drawing API support in your executor.", 36)
+    tog(f, "ESP  Boxes", "espBox",
+        function(sn) if sn then notifyOK("ESP Boxes ON") end end,
+        function(sn)
+            for _, o in pairs(espBoxObj) do
+                pcall(function() if o.box   then o.box.Visible   = false end end)
+                pcall(function() if o.nameL then o.nameL.Visible = false end end)
+            end
+            if sn then notifyErr("ESP Boxes OFF") end
+        end
+    )
+    sec(f, "Camera")
+    sld(f, "Field of View", 50, 120, 70, function(v) cam.FieldOfView = v end)
+    btn(f, "📷  Reset camera FOV", Color3.fromRGB(28,6,6), function() cam.FieldOfView = 70; notifyOK("Camera reset  (70°)") end)
+    sec(f, "Premium Features")
+    locked(f, "ESP  —  Health Bar")
+    locked(f, "ESP  —  Tracelines")
+    locked(f, "ESP  —  Distance Labels")
+    locked(f, "Chams  (player highlight)")
+    locked(f, "Fullbright")
+    locked(f, "Third Person")
+    locked(f, "Unlimited Zoom")
+    locked(f, "Rainbow Mode")
+end
+
+-- ================================================================
+--  PLAYER
+-- ================================================================
+do
+    local f = mkTab("Player")
+    sec(f, "Info & Actions")
+    btn(f, "📋  Copy UserID",       Color3.fromRGB(28,6,6), function() pcall(function() setclipboard(tostring(lp.UserId)) end); notifyInfo("UserID copied: " .. lp.UserId) end)
+    btn(f, "📡  Copy Username",     Color3.fromRGB(28,6,6), function() pcall(function() setclipboard(lp.Name) end); notifyInfo("Username copied: " .. lp.Name) end)
+    btn(f, "🌐  View position",     Color3.fromRGB(28,6,6), function()
+        local hrp = getHRP(); if hrp then local p = hrp.Position; notifyInfo(string.format("X: %.1f   Y: %.1f   Z: %.1f", p.X, p.Y, p.Z)) end
+    end)
+    btn(f, "🎭  Reload character",  Color3.fromRGB(28,6,6), function() pcall(function() lp:LoadCharacter() end); notifyInfo("Character reloaded") end)
+    btn(f, "🔄  Reset character",   Color3.fromRGB(28,6,6), function() local h = getHum(); if h then h.Health = 0; notifyInfo("Character reset") end end)
+    btn(f, "🔄  Rejoin server",     Color3.fromRGB(28,6,6), function() pcall(function() game:GetService("TeleportService"):Teleport(game.PlaceId, lp) end) end)
+    sec(f, "Premium Features")
+    locked(f, "Invisible  (Local)")
+    locked(f, "Transparency Slider")
+    locked(f, "Anti-AFK")
+    locked(f, "Follow Player")
+    locked(f, "Save / Restore Position")
+end
+
+-- ================================================================
+--  WORLD
+-- ================================================================
+do
+    local f = mkTab("World")
+    sec(f, "Time of Day")
+    btn(f, "☀️  Noon  (12:00)",   Color3.fromRGB(28,6,6), function() LGT.ClockTime = 12; notifyInfo("Time set to  12:00") end)
+    btn(f, "🌅  Dawn  (06:00)",   Color3.fromRGB(28,6,6), function() LGT.ClockTime = 6;  notifyInfo("Time set to  06:00") end)
+    btn(f, "🌆  Sunset  (18:00)", Color3.fromRGB(28,6,6), function() LGT.ClockTime = 18; notifyInfo("Time set to  18:00") end)
+    btn(f, "🌙  Midnight (00:00)",Color3.fromRGB(28,6,6), function() LGT.ClockTime = 0;  notifyInfo("Time set to  00:00") end)
+    btn(f, "🔄  Restore lighting",Color3.fromRGB(28,6,6), function()
+        LGT.ClockTime = origClockTime; LGT.Ambient = origAmbient
+        LGT.Brightness = origBright; LGT.GlobalShadows = origShadows
+        notifyOK("Lighting restored")
+    end)
+    sec(f, "Gravity")
+    btn(f, "🌍  Normal  (196)",   Color3.fromRGB(28,6,6), function() workspace.Gravity = 196; notifyInfo("Gravity: 196") end)
+    btn(f, "🪐  Lunar  (30)",     Color3.fromRGB(28,6,6), function() workspace.Gravity = 30;  notifyInfo("Gravity: 30  (Lunar)") end)
+    btn(f, "🔄  Restore gravity", Color3.fromRGB(28,6,6), function() workspace.Gravity = origGravity; notifyOK("Gravity restored") end)
+    sec(f, "Premium Features")
+    locked(f, "Time Loop  (auto cycle)")
+    locked(f, "Clock Time Slider")
+    locked(f, "Fog Control")
+    locked(f, "Darkness / Max Brightness")
+    locked(f, "No Gravity  (0)")
+    locked(f, "Neon Mode")
+    locked(f, "Transparent Map")
+    locked(f, "Paint Map Golden")
+    locked(f, "Delete All Decals")
+    locked(f, "Full World Reset")
+end
+
+-- ================================================================
+--  EXTRAS
+-- ================================================================
+do
+    local f = mkTab("Extras")
+    sec(f, "Roblox GUI")
+    btn(f, "🔇  Hide all GUI",  Color3.fromRGB(28,6,6), function()
+        pcall(function() SG:SetCoreGuiEnabled(Enum.CoreGuiType.All, false) end); notifyWarn("GUI hidden")
+    end)
+    btn(f, "🔈  Show all GUI",  Color3.fromRGB(28,6,6), function()
+        pcall(function() SG:SetCoreGuiEnabled(Enum.CoreGuiType.All, true) end); notifyOK("GUI restored")
+    end)
+    sec(f, "Audio")
+    btn(f, "🔇  Mute game", Color3.fromRGB(28,6,6), function()
+        for _, s in pairs(workspace:GetDescendants()) do if s:IsA("Sound") then pcall(function() s.Volume = 0 end) end end
+        notifyWarn("Game muted")
+    end)
+    btn(f, "🔊  Restore audio", Color3.fromRGB(28,6,6), function()
+        for _, s in pairs(workspace:GetDescendants()) do if s:IsA("Sound") then pcall(function() s.Volume = 0.5 end) end end
+        notifyOK("Audio restored")
+    end)
+    sec(f, "Premium Features")
+    locked(f, "Fake Lag")
+    locked(f, "Only Backpack Visible")
+    locked(f, "Only Chat Visible")
+    locked(f, "Tornado SpinBoost")
+    locked(f, "Shake Effect")
+end
+
+-- ================================================================
+--  CONFIG  (sin Chat Notifications toggle)
+-- ================================================================
+do
+    local f = mkTab("Config")
+    sec(f, "General")
+    inf(f, "Basic Mode  —  upgrade to WDG Premium to unlock themes and all advanced features.", 44)
+    btn(f, "⚠️  Turn OFF all toggles", Color3.fromRGB(55,8,8), function()
+        for _, r in pairs(togRefs) do if r.getState and r.getState() then r.setState(false, false) end end
+        local h = getHum(); if h then h.WalkSpeed = 16; h.JumpPower = 50 end
+        cam.FieldOfView = 70; workspace.Gravity = origGravity
+        notifyWarn("All toggles turned off")
+    end)
+    btn(f, "📷  Reset camera",  Color3.fromRGB(28,6,6), function() cam.FieldOfView = 70; lp.CameraMinZoomDistance = 0.5; lp.CameraMaxZoomDistance = 400; notifyOK("Camera reset") end)
+    btn(f, "🌍  Reset gravity", Color3.fromRGB(28,6,6), function() workspace.Gravity = origGravity; notifyOK("Gravity restored") end)
+    btn(f, "💡  Reset lighting",Color3.fromRGB(28,6,6), function() LGT.Ambient = origAmbient; LGT.Brightness = origBright; LGT.GlobalShadows = origShadows; notifyOK("Lighting restored") end)
+    sec(f, "Premium Features")
+    locked(f, "HUB Themes")
+    locked(f, "Chat Notifications")
+    locked(f, "Keybind Customization")
+    locked(f, "Full HUB Disconnect & Cleanup")
+end
+
+-- ================================================================
+--  MINIMIZE / MAXIMIZE / CLOSE
+-- ================================================================
+local minimized = false
+local savedW, savedH = 650, 450
+local maximized = false
+
+MinBtn.MouseButton1Click:Connect(function()
+    if maximized then return end
+    minimized = not minimized
+    if minimized then
+        savedW = MF.AbsoluteSize.X; savedH = MF.AbsoluteSize.Y
+        SB.Visible = false; CA.Visible = false; Glow.Visible = false; RH.Visible = false
+        tween(MF, {Size = UDim2.new(0, savedW, 0, 46)}, 0.25)
+    else
+        tween(MF, {Size = UDim2.new(0, savedW, 0, savedH)}, 0.25)
+        task.wait(0.06)
+        SB.Visible = true; CA.Visible = true; Glow.Visible = true; RH.Visible = true
+    end
+end)
+MaxBtn.MouseButton1Click:Connect(function()
+    minimized = false; maximized = not maximized
+    if maximized then
+        savedW = MF.AbsoluteSize.X; savedH = MF.AbsoluteSize.Y
+        local vp = cam.ViewportSize
+        tween(MF, {Size = UDim2.new(0, vp.X, 0, vp.Y), Position = UDim2.new(0, 0, 0, 0)}, 0.2)
+        SB.Visible = true; CA.Visible = true; Glow.Visible = true; RH.Visible = true; MaxBtn.Text = "❐"
+    else
+        tween(MF, {Size = UDim2.new(0, savedW, 0, savedH), Position = UDim2.new(0.5, -savedW/2, 0.5, -savedH/2)}, 0.2)
+        MaxBtn.Text = "□"
+    end
+end)
+CloseBtn.MouseButton1Click:Connect(function()
+    maximized = false; MaxBtn.Text = "□"
+    MF.Visible = false; Glow.Visible = false
+    notify("HUB hidden  ·  Press  [ M ]  to reopen", C.red1, "WDG HUB", "👁")
+end)
+
+-- ================================================================
+--  DRAG
+-- ================================================================
+local dragging = false; local dragStart = Vector2.new(); local startPos = UDim2.new()
+TB.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.Position.X > TB.AbsolutePosition.X + TB.AbsoluteSize.X - 124 then return end
+        dragging = true; dragStart = Vector2.new(input.Position.X, input.Position.Y); startPos = MF.Position
+    end
+end)
+TB.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+UIS.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = Vector2.new(input.Position.X, input.Position.Y) - dragStart
+        MF.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- ================================================================
+--  RESIZE
+-- ================================================================
+local resizing = false; local resizeStart = Vector2.new(); local startSize = UDim2.new()
+local MIN_W, MIN_H = 460, 340
+RH.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        resizing = true; resizeStart = Vector2.new(input.Position.X, input.Position.Y); startSize = MF.Size
+    end
+end)
+RH.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        resizing = false; savedW = MF.AbsoluteSize.X; savedH = MF.AbsoluteSize.Y
+    end
+end)
+UIS.InputChanged:Connect(function(input)
+    if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = Vector2.new(input.Position.X, input.Position.Y) - resizeStart
+        MF.Size = UDim2.new(0, math.max(MIN_W, startSize.X.Offset + delta.X), 0, math.max(MIN_H, startSize.Y.Offset + delta.Y))
+    end
+end)
+
+-- ================================================================
+--  KEYBOARD INPUTS
+-- ================================================================
+local ic = UIS.InputBegan:Connect(function(inp, gp)
+    if gp then return end
+
+    -- Toggle HUB visibility
+    if inp.KeyCode == Enum.KeyCode.M and UIReady then
+        local v = not MF.Visible; MF.Visible = v; Glow.Visible = v
+    end
+
+    -- ── AIMBOT  [ Q ]  ─────────────────────────────────────────
+    -- SIN notificación al usar la key, solo al pulsar el pill ON/OFF
+    if inp.KeyCode == Enum.KeyCode.Q and T.aimbot and not locking then
+        locking = true
+        local best, bestD = nil, math.huge
+        local ctr = cam.ViewportSize / 2
+        for _, p in pairs(PLS:GetPlayers()) do
+            if p ~= lp and p.Character then
+                local head = p.Character:FindFirstChild("Head")
+                if head then
+                    local pos2D, onScreen = cam:WorldToViewportPoint(head.Position)
+                    if onScreen and pos2D.Z > 0 then
+                        local d = (Vector2.new(pos2D.X, pos2D.Y) - ctr).Magnitude
+                        if d < bestD and d < SL.aimbotDist then bestD = d; best = head end
+                    end
+                end
+            end
+        end
+        if best then
+            local st = tick(); local c2
+            c2 = RS.RenderStepped:Connect(function()
+                if tick() - st >= lockTime or not T.aimbot or not best or not best.Parent then
+                    c2:Disconnect(); locking = false; return
+                end
+                cam.CFrame = CFrame.new(cam.CFrame.Position, best.Position)
+            end)
+        else
+            locking = false
+            -- Solo aviso si no hay target (esto es util, no es el toggle)
+            notifyWarn("Aimbot: no target in range", "AIMBOT")
+        end
+    end
+
+    -- ── TELEPORT TO CURSOR  [ Z ]  ─────────────────────────────
+    -- SIN notificación al teletransportarse (solo al activar/desactivar el toggle)
+    if inp.KeyCode == Enum.KeyCode.Z and T.teleport then
+        local hrp = getHRP()
+        if hrp then
+            local mouse = lp:GetMouse()
+            local targetPos = mouse.Hit.Position + Vector3.new(0, 3, 0)
+            hrp.CFrame = CFrame.new(targetPos)
+            -- Sin notificación aquí
+        end
+    end
+end)
+table.insert(conns, ic)
+
+-- ================================================================
+--  RENDERSTEPPED  —  continuous logic
+-- ================================================================
+local rsConn = RS.RenderStepped:Connect(function()
+    local char = getChar(); if not char then return end
+    local hrp  = char:FindFirstChild("HumanoidRootPart")
+    local hum  = char:FindFirstChild("Humanoid")
+
+    -- Speed / Jump
+    if T.speed   and hum then hum.WalkSpeed  = SL.walkSpeed  end
+    if T.infJump and hum then hum.JumpPower  = SL.jumpPower  end
+
+    -- Infinite Jump (space detection)
+    if T.infJump and UIS:IsKeyDown(Enum.KeyCode.Space) then
+        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end
+
+    -- No Clip
+    if T.noclip then
+        for _, p in pairs(char:GetDescendants()) do
+            if p:IsA("BasePart") then pcall(function() p.CanCollide = false end) end
+        end
+    end
+
+    -- ── ESP Box ────────────────────────────────────────────────
+    for _, p in pairs(PLS:GetPlayers()) do
+        if p == lp then continue end
+
+        if not T.espBox then
+            if espBoxObj[p] then
+                pcall(function()
+                    if espBoxObj[p].box   then espBoxObj[p].box.Visible   = false end
+                    if espBoxObj[p].nameL then espBoxObj[p].nameL.Visible = false end
+                end)
+                espBoxObj[p] = nil
+            end
+            continue
+        end
+
+        if not p.Character or not p.Character:FindFirstChild("HumanoidRootPart") then
+            if espBoxObj[p] then
+                pcall(function()
+                    if espBoxObj[p].box   then espBoxObj[p].box.Visible   = false end
+                    if espBoxObj[p].nameL then espBoxObj[p].nameL.Visible = false end
+                end)
+                espBoxObj[p] = nil
+            end
+            continue
+        end
+
+        if not espBoxObj[p] then
+            local ok1, box   = pcall(function() return Drawing.new("Square") end)
+            local ok2, nameL = pcall(function() return Drawing.new("Text")   end)
+            espBoxObj[p] = {
+                box   = ok1 and box   or nil,
+                nameL = ok2 and nameL or nil,
+            }
+            if ok1 then
+                box.Thickness = 1.5
+                box.Color     = Color3.fromRGB(220, 50, 50)
+                box.Filled    = false
+                box.Visible   = false
+            end
+            if ok2 then
+                nameL.Size    = 13
+                nameL.Color   = Color3.fromRGB(255, 160, 160)
+                nameL.Outline = true
+                nameL.Text    = p.Name
+                nameL.Visible = false
+            end
+        end
+
+        local head = p.Character:FindFirstChild("Head")
+        if not head then continue end
+
+        local pos2D, onScreen = cam:WorldToViewportPoint(head.Position)
+
+        if onScreen and pos2D.Z > 0 then
+            local dist = (cam.CFrame.Position - head.Position).Magnitude
+            local sc   = math.clamp(1600 / dist, 14, 120)
+            local bx   = pos2D.X - sc * 0.5
+            local by   = pos2D.Y - sc * 0.8
+
+            if espBoxObj[p].box then
+                espBoxObj[p].box.Position = Vector2.new(bx, by)
+                espBoxObj[p].box.Size     = Vector2.new(sc, sc * 2)
+                espBoxObj[p].box.Visible  = true
+            end
+            if espBoxObj[p].nameL then
+                espBoxObj[p].nameL.Position = Vector2.new(bx, by - 18)
+                espBoxObj[p].nameL.Visible  = true
+            end
+        else
+            if espBoxObj[p].box   then espBoxObj[p].box.Visible   = false end
+            if espBoxObj[p].nameL then espBoxObj[p].nameL.Visible = false end
+        end
+    end
+end)
+table.insert(conns, rsConn)
+
+-- ================================================================
+--  ESP cleanup on player leave / char removal
+-- ================================================================
+PLS.PlayerRemoving:Connect(function(p)
+    if espBoxObj[p] then
+        pcall(function()
+            if espBoxObj[p].box   then espBoxObj[p].box:Remove()   end
+            if espBoxObj[p].nameL then espBoxObj[p].nameL:Remove() end
+        end)
+        espBoxObj[p] = nil
+    end
+end)
+PLS.PlayerAdded:Connect(function(p)
+    p.CharacterRemoving:Connect(function()
+        if espBoxObj[p] then
+            pcall(function()
+                if espBoxObj[p].box   then espBoxObj[p].box.Visible   = false end
+                if espBoxObj[p].nameL then espBoxObj[p].nameL.Visible = false end
+            end)
+            espBoxObj[p] = nil
+        end
+    end)
+end)
+
+-- ================================================================
+--  STARTUP
+-- ================================================================
+switchTab("Home")
+while not UIReady do task.wait() end
+task.wait(0.5)
+MF.Visible = true; Glow.Visible = true
+notify("🩸  WDG‐World Demonic Glitch HUB  —  Basic Mode", C.red1, "WDG HUB", "🩸")
