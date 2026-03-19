@@ -1,5 +1,6 @@
 -- ================================================================
---  WDG‐World Demonic Glitch HUB  |  Basic Mode  |  v1
+--  WDG HUB  |  Basic Mode  |  v2
+--  Key system + animated background + modern UI
 -- ================================================================
 local TS  = game:GetService("TweenService")
 local UIS = game:GetService("UserInputService")
@@ -12,7 +13,55 @@ local lp  = PLS.LocalPlayer
 local cam = workspace.CurrentCamera
 
 -- ================================================================
---  COLORS
+--  VALID KEYS  (20 unique keys — distribute via Discord tickets)
+-- ================================================================
+local VALID_KEYS = {
+    "WDG-X9K2-ALPHA",
+    "WDG-7TQP-dpsnz",
+    "WDG-M4NR-zaqyw",
+    "WDG-3ZVL-fhskw",
+    "WDG-Q8WJ-ergdc",
+    "WDG-P5YC-irtgh",
+    "WDG-H2BT-dcvgd",
+    "WDG-K6SF-uyefh",
+    "WDG-R1DX-wfmlb",
+    "WDG-N9GU-petdh",
+    "WDG-V4MA-dhsbe",
+    "WDG-C7HP-nvhsy",
+    "WDG-T3KQ-oehsg",
+    "WDG-W8NZ-qwent",
+    "WDG-J2EY-rerty",
+    "WDG-F6RB-vbcbn",
+    "WDG-L5OW-rhgfd",
+    "WDG-S9VT-gyrtx",
+    "WDG-D1CX-fyrtx",
+    "WDG-U7PK-vtqoa",
+}
+
+-- Key→UserId binding stored in _G so it persists across the game session
+-- Format: _G.__WDGKeyOwners = { ["KEY"] = userId }
+if not _G.__WDGKeyOwners then _G.__WDGKeyOwners = {} end
+
+local function isValidKey(k)
+    local trimmed = k:match("^%s*(.-)%s*$"):upper()
+    for _, v in ipairs(VALID_KEYS) do
+        if v:upper() == trimmed then
+            -- Check if this key is already bound to a different user
+            local owner = _G.__WDGKeyOwners[trimmed]
+            if owner == nil then
+                return true, trimmed       -- key free, allow and bind
+            elseif owner == lp.UserId then
+                return true, trimmed       -- same account, allow
+            else
+                return false, "bound"      -- bound to another account
+            end
+        end
+    end
+    return false, "invalid"
+end
+
+-- ================================================================
+--  COLORS  (red theme — original WDG)
 -- ================================================================
 local C = {
     red1    = Color3.fromRGB(160,  20,  20),
@@ -34,23 +83,12 @@ local C = {
 --  STATE
 -- ================================================================
 local T = {
-    speed     = false,
-    infJump   = false,
-    noclip    = false,
-    aimbot    = false,
-    teleport  = false,
-    espBox    = false,
-    autoBhop  = false,
-    nightVis  = false,
-    removeFog = false,
-    crosshair = false,
-    antiAfk   = false,
-    chatSpam  = false,
+    speed=false, infJump=false, noclip=false, aimbot=false, teleport=false,
+    espBox=false, autoBhop=false, nightVis=false, removeFog=false, crosshair=false,
+    antiAfk=false, chatSpam=false, fly=false,
 }
 local SL = {
-    walkSpeed  = 50,
-    jumpPower  = 100,
-    aimbotDist = 600,
+    walkSpeed=50, jumpPower=100, aimbotDist=600, flySpeed=60,
 }
 
 local origGravity   = workspace.Gravity
@@ -65,197 +103,320 @@ local locking     = false
 local lockTime    = 0.20
 local espBoxObj   = {}
 local chLines     = {}
-local chatSpamMsg = "WDG HUB  *  wdg.gg"
+local chatSpamMsg = "WDG HUB  *  Basic Mode"
 local chatSpamInt = 5
-
-local conns   = {}
-local togRefs = {}
+local conns       = {}
+local togRefs     = {}
+local flyActive   = false
 
 -- ================================================================
 --  UTILS
 -- ================================================================
-local function tween(obj, props, t, style, dir)
-    TS:Create(obj, TweenInfo.new(
-        t     or 0.12,
-        style or Enum.EasingStyle.Quint,
-        dir   or Enum.EasingDirection.Out
-    ), props):Play()
+local function tween(obj,props,t,style,dir)
+    TS:Create(obj,TweenInfo.new(t or 0.12,style or Enum.EasingStyle.Quint,dir or Enum.EasingDirection.Out),props):Play()
 end
 local function getChar() return lp.Character end
-local function getHRP()  local c = getChar(); return c and c:FindFirstChild("HumanoidRootPart") end
-local function getHum()  local c = getChar(); return c and c:FindFirstChild("Humanoid") end
+local function getHRP()  local c=getChar(); return c and c:FindFirstChild("HumanoidRootPart") end
+local function getHum()  local c=getChar(); return c and c:FindFirstChild("Humanoid") end
 
 -- ================================================================
---  SEND CHAT  —  3 methods
+--  SEND CHAT
 -- ================================================================
 local function sendChat(msg)
-    local sent = false
+    local sent=false
     pcall(function()
-        local tcs = game:GetService("TextChatService")
-        local ch = tcs.TextChannels:FindFirstChild("RBXGeneral")
-                or tcs.TextChannels:FindFirstChildOfClass("TextChannel")
-        if ch then ch:SendAsync(msg); sent = true end
+        local tcs=game:GetService("TextChatService")
+        local ch=tcs.TextChannels:FindFirstChild("RBXGeneral") or tcs.TextChannels:FindFirstChildOfClass("TextChannel")
+        if ch then ch:SendAsync(msg); sent=true end
     end)
     if sent then return end
     pcall(function()
-        game:GetService("ReplicatedStorage")
-            .DefaultChatSystemChatEvents
-            .SayMessageRequest:FireServer(msg, "All")
-        sent = true
+        game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer(msg,"All"); sent=true
     end)
     if sent then return end
     pcall(function()
-        local char = getChar()
-        if char then game:GetService("Chat"):Chat(char, msg, Enum.ChatColor.Red) end
+        local char=getChar(); if char then game:GetService("Chat"):Chat(char,msg,Enum.ChatColor.Red) end
     end)
 end
 
 -- ================================================================
---  NOTIFICATIONS  —  cooldown 10s, no stacking
+--  NOTIFICATIONS
 -- ================================================================
-local NotifGui = Instance.new("ScreenGui")
-NotifGui.Name = "WDGNotif"; NotifGui.ResetOnSpawn = false
-NotifGui.IgnoreGuiInset = true; NotifGui.DisplayOrder = 1000000
-NotifGui.Parent = game.CoreGui
+local NotifGui=Instance.new("ScreenGui")
+NotifGui.Name="WDGNotif"; NotifGui.ResetOnSpawn=false
+NotifGui.IgnoreGuiInset=true; NotifGui.DisplayOrder=1000001; NotifGui.Parent=game.CoreGui
 
-local notifList     = {}
-local N_H, N_G, N_W = 84, 8, 348
-local lastNotifTime = -999  -- tracks cooldown
-local NOTIF_CD      = 10    -- seconds between notifications
+local notifStack={}
+local NOTIF_W,NOTIF_H,NOTIF_G,NOTIF_PAD=300,62,8,14
 
-local function rebuildPos()
-    for i, fr in ipairs(notifList) do
-        local ty = 18 + (i - 1) * (N_H + N_G)
-        tween(fr, {Position = UDim2.new(1, -N_W - 16, 0, ty)}, 0.26, Enum.EasingStyle.Quint)
+local function notify(msg,col,icon,dur)
+    col=col or C.red1; icon=icon or "!"; dur=dur or 3.2
+    local fr=Instance.new("Frame",NotifGui)
+    fr.Size=UDim2.new(0,NOTIF_W,0,NOTIF_H); fr.Position=UDim2.new(1,NOTIF_W+20,0,NOTIF_PAD)
+    fr.BackgroundColor3=Color3.fromRGB(9,2,2); fr.BackgroundTransparency=0.06; fr.BorderSizePixel=0
+    Instance.new("UICorner",fr).CornerRadius=UDim.new(0,10)
+    local fst=Instance.new("UIStroke",fr); fst.Color=col; fst.Thickness=1.4; fst.Transparency=0.2
+    local bar=Instance.new("Frame",fr); bar.Size=UDim2.new(0,3,1,-14); bar.Position=UDim2.new(0,6,0,7)
+    bar.BackgroundColor3=col; bar.BorderSizePixel=0; Instance.new("UICorner",bar).CornerRadius=UDim.new(1,0)
+    local ic=Instance.new("Frame",fr); ic.Size=UDim2.new(0,30,0,30); ic.Position=UDim2.new(0,14,0.5,-15)
+    ic.BackgroundColor3=col; ic.BackgroundTransparency=0.78; ic.BorderSizePixel=0; Instance.new("UICorner",ic).CornerRadius=UDim.new(1,0)
+    local iLb=Instance.new("TextLabel",ic); iLb.Size=UDim2.new(1,0,1,0); iLb.BackgroundTransparency=1
+    iLb.Text=icon; iLb.Font=Enum.Font.GothamBold; iLb.TextSize=12; iLb.TextColor3=col; iLb.ZIndex=4
+    local mLb=Instance.new("TextLabel",fr); mLb.Size=UDim2.new(1,-56,1,-10); mLb.Position=UDim2.new(0,50,0,5)
+    mLb.BackgroundTransparency=1; mLb.Text=msg; mLb.Font=Enum.Font.Gotham; mLb.TextSize=11.5
+    mLb.TextColor3=Color3.fromRGB(225,180,180); mLb.TextXAlignment=Enum.TextXAlignment.Left; mLb.TextWrapped=true; mLb.ZIndex=4
+    local pt=Instance.new("Frame",fr); pt.Size=UDim2.new(1,-10,0,2); pt.Position=UDim2.new(0,5,1,-4)
+    pt.BackgroundColor3=Color3.fromRGB(25,5,5); pt.BorderSizePixel=0; Instance.new("UICorner",pt).CornerRadius=UDim.new(1,0)
+    local pf=Instance.new("Frame",pt); pf.Size=UDim2.new(1,0,1,0); pf.BackgroundColor3=col; pf.BorderSizePixel=0; Instance.new("UICorner",pf).CornerRadius=UDim.new(1,0)
+    table.insert(notifStack,fr)
+    local function restack()
+        for i,f in ipairs(notifStack) do tween(f,{Position=UDim2.new(1,-NOTIF_W-14,0,NOTIF_PAD+(i-1)*(NOTIF_H+NOTIF_G))},0.22,Enum.EasingStyle.Quint) end
     end
+    tween(fr,{Position=UDim2.new(1,-NOTIF_W-14,0,NOTIF_PAD)},0.3,Enum.EasingStyle.Back,Enum.EasingDirection.Out); restack()
+    task.spawn(function()
+        local steps=80
+        for i=steps,0,-1 do if not pf.Parent then return end; pf.Size=UDim2.new(i/steps,0,1,0); task.wait(dur/steps) end
+        tween(fr,{BackgroundTransparency=1},0.25); tween(fst,{Transparency=1},0.25)
+        tween(mLb,{TextTransparency=1},0.2); tween(iLb,{TextTransparency=1},0.2); tween(bar,{BackgroundTransparency=1},0.2)
+        tween(fr,{Position=UDim2.new(1,NOTIF_W+20,0,fr.AbsolutePosition.Y)},0.28,Enum.EasingStyle.Quint,Enum.EasingDirection.In)
+        task.wait(0.32)
+        for i2,f2 in ipairs(notifStack) do if f2==fr then table.remove(notifStack,i2); break end end
+        fr:Destroy(); restack()
+    end)
 end
 
---  force=true  bypasses cooldown (used for startup)
-local function notify(msg, col, title, icon, force)
-    local now = tick()
-    if not force then
-        if now - lastNotifTime < NOTIF_CD then return end
-        if #notifList >= 2 then return end   -- max 2 visible at once
-    end
-    lastNotifTime = now
+local function notifyOK(m)   notify(m,C.green,"OK") end
+local function notifyWarn(m) notify(m,C.orange,"!!") end
+local function notifyInfo(m) notify(m,C.red1,"i") end
+local function notifyLocked() notify("Requires WDG Premium Mode",C.red3,"X") end
 
-    col   = col   or C.red1
-    title = title or "WDG HUB"
-    icon  = icon  or "🩸"
+-- ================================================================
+--  KEY SCREEN  (fixed center panel, no drag)
+-- ================================================================
+local keyAttempts = 0
+local MAX_ATTEMPTS = 5
+local keyPassed    = false
+local usedKey      = ""   -- key que pasó la validación, para el log
 
-    local fr = Instance.new("Frame")
-    fr.Size = UDim2.new(0,N_W,0,N_H); fr.Position = UDim2.new(1,N_W+30,0,18)
-    fr.BackgroundColor3 = Color3.fromRGB(8,2,2); fr.BackgroundTransparency = 0.04
-    fr.BorderSizePixel = 0; fr.ClipsDescendants = false; fr.Parent = NotifGui
-    Instance.new("UICorner", fr).CornerRadius = UDim.new(0,13)
+local KGui=Instance.new("ScreenGui")
+KGui.Name="WDGKey"; KGui.ResetOnSpawn=false
+KGui.IgnoreGuiInset=true; KGui.DisplayOrder=1000002; KGui.Parent=game.CoreGui
 
-    local og = Instance.new("UIStroke", fr)
-    og.Color = col; og.Thickness = 1.6; og.Transparency = 0.15
-    og.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+-- Animated background for key screen
+local KBG=Instance.new("Frame",KGui)
+KBG.Size=UDim2.new(1,0,1,0); KBG.BackgroundColor3=Color3.fromRGB(4,1,1); KBG.BorderSizePixel=0; KBG.ZIndex=0
 
-    local stripe = Instance.new("Frame", fr)
-    stripe.Size = UDim2.new(0,4,1,-16); stripe.Position = UDim2.new(0,6,0,8)
-    stripe.BackgroundColor3 = col; stripe.BorderSizePixel = 0
-    Instance.new("UICorner", stripe).CornerRadius = UDim.new(1,0)
-
-    local iconBg = Instance.new("Frame", fr)
-    iconBg.Size = UDim2.new(0,40,0,40); iconBg.Position = UDim2.new(0,16,0.5,-20)
-    iconBg.BackgroundColor3 = col; iconBg.BackgroundTransparency = 0.75; iconBg.BorderSizePixel = 0
-    Instance.new("UICorner", iconBg).CornerRadius = UDim.new(0,10)
-    local ir = Instance.new("UIStroke", iconBg); ir.Color=col; ir.Thickness=1.2; ir.Transparency=0.35
-
-    local iconLbl = Instance.new("TextLabel", iconBg)
-    iconLbl.Size = UDim2.new(1,0,1,0); iconLbl.BackgroundTransparency = 1
-    iconLbl.Text = icon; iconLbl.Font = Enum.Font.GothamBold; iconLbl.TextSize = 20
-    iconLbl.TextColor3 = col; iconLbl.TextXAlignment = Enum.TextXAlignment.Center; iconLbl.ZIndex = 4
-
-    local tl = Instance.new("TextLabel", fr)
-    tl.Size = UDim2.new(1,-68,0,16); tl.Position = UDim2.new(0,64,0,14)
-    tl.BackgroundTransparency = 1; tl.Text = title; tl.Font = Enum.Font.GothamBold; tl.TextSize = 10
-    tl.TextColor3 = col; tl.TextXAlignment = Enum.TextXAlignment.Left; tl.ZIndex = 4; tl.TextTransparency = 0.05
-
-    local lb = Instance.new("TextLabel", fr)
-    lb.Size = UDim2.new(1,-68,0,38); lb.Position = UDim2.new(0,64,0,30)
-    lb.BackgroundTransparency = 1; lb.Text = msg; lb.Font = Enum.Font.Gotham; lb.TextSize = 12
-    lb.TextColor3 = Color3.fromRGB(225,180,180); lb.TextXAlignment = Enum.TextXAlignment.Left
-    lb.TextWrapped = true; lb.ZIndex = 4
-
-    local track = Instance.new("Frame", fr)
-    track.Size = UDim2.new(1,-8,0,3); track.Position = UDim2.new(0,4,1,-6)
-    track.BackgroundColor3 = Color3.fromRGB(30,6,6); track.BorderSizePixel = 0
-    Instance.new("UICorner", track).CornerRadius = UDim.new(0,3)
-    local bar = Instance.new("Frame", track)
-    bar.Size = UDim2.new(1,0,1,0); bar.BackgroundColor3 = col; bar.BorderSizePixel = 0
-    Instance.new("UICorner", bar).CornerRadius = UDim.new(0,3)
-    local barGlow = Instance.new("Frame", track)
-    barGlow.Size = UDim2.new(1,0,0.5,0); barGlow.BackgroundColor3 = C.white
-    barGlow.BackgroundTransparency = 0.78; barGlow.BorderSizePixel = 0; barGlow.ZIndex = 2
-    Instance.new("UICorner", barGlow).CornerRadius = UDim.new(0,3)
-
-    table.insert(notifList, fr)
-    tween(fr, {Position=UDim2.new(1,-N_W-16,0,18)}, 0.38, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-    rebuildPos()
-
-    task.spawn(function()
-        task.wait(0.1); tween(og,{Transparency=0},0.12)
-        task.wait(0.14); tween(og,{Transparency=0.15},0.3)
+local particleConnsKey={}
+local function spawnKeyParticle()
+    local dot=Instance.new("Frame",KBG)
+    local sz=math.random(2,5)
+    dot.Size=UDim2.new(0,sz,0,sz)
+    local vp=cam.ViewportSize
+    local cx=math.random(0,math.floor(vp.X)); local cy=math.random(0,math.floor(vp.Y*0.5))
+    dot.Position=UDim2.new(0,cx,0,cy)
+    dot.BackgroundColor3=C.red1; dot.BackgroundTransparency=math.random(45,65)/100
+    dot.BorderSizePixel=0; dot.ZIndex=1; Instance.new("UICorner",dot).CornerRadius=UDim.new(1,0)
+    local vy=math.random(30,70); local vx=math.random(-15,8)
+    local life=0; local maxLife=(vp.Y/vy)*math.random(90,110)/100
+    local conn
+    conn=RS.Heartbeat:Connect(function(dt)
+        if not dot.Parent then conn:Disconnect(); return end
+        life=life+dt; cx=cx+vx*dt; cy=cy+vy*dt
+        dot.Position=UDim2.new(0,cx,0,cy)
+        local prog=life/maxLife
+        if prog>=0.6 then dot.BackgroundTransparency=math.min(1,(prog-0.6)/0.4) end
+        if cy>vp.Y+10 or life>=maxLife then conn:Disconnect(); pcall(function() dot:Destroy() end) end
     end)
-    task.spawn(function()
-        local dur=4.2; local steps=120
-        for i=steps,0,-1 do
-            if not bar.Parent then return end
-            bar.Size=UDim2.new(i/steps,0,1,0); barGlow.Size=UDim2.new(i/steps,0,0.5,0)
-            task.wait(dur/steps)
+    table.insert(particleConnsKey,conn)
+end
+task.spawn(function()
+    for i=1,20 do task.wait(0.08); spawnKeyParticle() end
+    while KGui and KGui.Parent do task.wait(0.4); spawnKeyParticle() end
+end)
+
+-- Key panel
+local KF=Instance.new("Frame",KGui)
+KF.Size=UDim2.new(0,420,0,260); KF.Position=UDim2.new(0.5,-210,0.5,-130)
+KF.BackgroundColor3=C.dark; KF.BorderSizePixel=0; KF.ZIndex=2
+Instance.new("UICorner",KF).CornerRadius=UDim.new(0,14)
+local KFst=Instance.new("UIStroke",KF); KFst.Color=C.red1; KFst.Thickness=1.6; KFst.Transparency=0.2
+
+-- Top accent line
+local KAcc=Instance.new("Frame",KF)
+KAcc.Size=UDim2.new(1,0,0,3); KAcc.BackgroundColor3=C.red1; KAcc.BorderSizePixel=0; KAcc.ZIndex=3
+Instance.new("UICorner",KAcc).CornerRadius=UDim.new(0,14)
+
+-- Logo / title
+local KLogo=Instance.new("TextLabel",KF)
+KLogo.Size=UDim2.new(1,0,0,36); KLogo.Position=UDim2.new(0,0,0,16)
+KLogo.BackgroundTransparency=1; KLogo.Text="WDG HUB"
+KLogo.Font=Enum.Font.GothamBold; KLogo.TextSize=28; KLogo.TextColor3=C.red1; KLogo.ZIndex=3
+
+local KSub=Instance.new("TextLabel",KF)
+KSub.Size=UDim2.new(1,0,0,18); KSub.Position=UDim2.new(0,0,0,52)
+KSub.BackgroundTransparency=1; KSub.Text="Enter your Key to continue"
+KSub.Font=Enum.Font.Gotham; KSub.TextSize=12; KSub.TextColor3=C.light; KSub.ZIndex=3
+
+local KDisc=Instance.new("TextLabel",KF)
+KDisc.Size=UDim2.new(1,-40,0,26); KDisc.Position=UDim2.new(0,20,0,76)
+KDisc.BackgroundColor3=Color3.fromRGB(16,4,4); KDisc.BorderSizePixel=0
+KDisc.Text="Join our Discord and open a ticket to get your key"
+KDisc.Font=Enum.Font.Gotham; KDisc.TextSize=10.5; KDisc.TextColor3=Color3.fromRGB(180,100,100)
+KDisc.TextWrapped=true; KDisc.ZIndex=3; Instance.new("UICorner",KDisc).CornerRadius=UDim.new(0,6)
+local KDiscP=Instance.new("UIPadding",KDisc); KDiscP.PaddingLeft=UDim.new(0,8); KDiscP.PaddingRight=UDim.new(0,8)
+
+-- Text box
+local KBoxBG=Instance.new("Frame",KF)
+KBoxBG.Size=UDim2.new(1,-40,0,38); KBoxBG.Position=UDim2.new(0,20,0,116)
+KBoxBG.BackgroundColor3=Color3.fromRGB(6,2,2); KBoxBG.BorderSizePixel=0; KBoxBG.ZIndex=3
+Instance.new("UICorner",KBoxBG).CornerRadius=UDim.new(0,8)
+local KBoxSt=Instance.new("UIStroke",KBoxBG); KBoxSt.Color=C.stroke; KBoxSt.Thickness=1.2
+
+local KBox=Instance.new("TextBox",KBoxBG)
+KBox.Size=UDim2.new(1,-16,1,0); KBox.Position=UDim2.new(0,8,0,0)
+KBox.BackgroundTransparency=1; KBox.Text=""
+KBox.PlaceholderText="Type your key here..."; KBox.PlaceholderColor3=Color3.fromRGB(80,30,30)
+KBox.Font=Enum.Font.GothamBold; KBox.TextSize=13; KBox.TextColor3=C.light
+KBox.ClearTextOnFocus=false; KBox.ZIndex=4
+KBox.FocusLost:Connect(function()
+    tween(KBoxSt,{Color=C.stroke,Transparency=0},0.12)
+end)
+KBox.Focused:Connect(function()
+    tween(KBoxSt,{Color=C.red1,Transparency=0},0.12)
+end)
+
+-- Error label
+local KErr=Instance.new("TextLabel",KF)
+KErr.Size=UDim2.new(1,-40,0,18); KErr.Position=UDim2.new(0,20,0,158)
+KErr.BackgroundTransparency=1; KErr.Text=""
+KErr.Font=Enum.Font.GothamBold; KErr.TextSize=11; KErr.TextColor3=Color3.fromRGB(255,60,60)
+KErr.ZIndex=3; KErr.TextXAlignment=Enum.TextXAlignment.Left
+
+-- Submit button
+local KBtn=Instance.new("TextButton",KF)
+KBtn.Size=UDim2.new(1,-40,0,38); KBtn.Position=UDim2.new(0,20,0,182)
+KBtn.BackgroundColor3=C.red2; KBtn.Text="CONFIRM KEY"; KBtn.Font=Enum.Font.GothamBold
+KBtn.TextSize=13; KBtn.TextColor3=C.white; KBtn.BorderSizePixel=0; KBtn.ZIndex=3; KBtn.AutoButtonColor=false
+Instance.new("UICorner",KBtn).CornerRadius=UDim.new(0,8)
+Instance.new("UIStroke",KBtn).Color=C.red1
+KBtn.MouseEnter:Connect(function() tween(KBtn,{BackgroundColor3=C.red1},0.12) end)
+KBtn.MouseLeave:Connect(function() tween(KBtn,{BackgroundColor3=C.red2},0.12) end)
+
+-- Attempt counter label
+local KAtt=Instance.new("TextLabel",KF)
+KAtt.Size=UDim2.new(1,0,0,14); KAtt.Position=UDim2.new(0,0,0,232)
+KAtt.BackgroundTransparency=1; KAtt.Text="Attempts: 0 / "..MAX_ATTEMPTS
+KAtt.Font=Enum.Font.Gotham; KAtt.TextSize=9; KAtt.TextColor3=Color3.fromRGB(80,30,30); KAtt.ZIndex=3
+
+-- Pulse animation on the panel border
+task.spawn(function()
+    while KGui and KGui.Parent do
+        tween(KFst,{Transparency=0},0.8,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut)
+        task.wait(0.9)
+        tween(KFst,{Transparency=0.5},0.8,Enum.EasingStyle.Sine,Enum.EasingDirection.InOut)
+        task.wait(0.9)
+    end
+end)
+
+-- Key validation logic
+local function tryKey()
+    local input=KBox.Text
+    if input=="" then KErr.Text="  Please enter a key."; return end
+    keyAttempts=keyAttempts+1
+    KAtt.Text="Attempts: "..keyAttempts.." / "..MAX_ATTEMPTS
+    local valid, result = isValidKey(input)
+    if valid then
+        -- Bind key to this userId in _G so it can't be reused by another account this session
+        _G.__WDGKeyOwners[result] = lp.UserId
+        usedKey   = result   -- save for startup log
+        keyPassed = true
+        KErr.Text=""; KErr.TextColor3=C.green
+        KBtn.Text="ACCESS GRANTED"
+
+        -- Flash verde en borde y botón
+        tween(KBtn,{BackgroundColor3=C.green},0.25)
+        tween(KFst,{Color=C.green,Transparency=0},0.25)
+        tween(KAcc,{BackgroundColor3=C.green},0.25)
+        task.wait(0.5)
+
+        -- Todo el panel desaparece JUNTO: escala hacia el centro + fade en un solo tween
+        -- Usamos un wrapper para la escala
+        KF.AnchorPoint=Vector2.new(0.5,0.5)
+        KF.Position=UDim2.new(0.5,0,0.5,0)
+
+        local fadeT=0.38
+        tween(KF,  {Size=UDim2.new(0,0,0,0), BackgroundTransparency=1},  fadeT, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        tween(KFst,{Transparency=1},                                       fadeT, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+        tween(KBG, {BackgroundTransparency=1},                             fadeT, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+
+        task.wait(fadeT+0.05)
+        KGui:Destroy()
+        _G.__WDGKeyPassed=true
+
+    elseif result=="bound" then
+        -- Key already used by someone else
+        KErr.TextColor3=Color3.fromRGB(255,60,60)
+        KErr.Text="  This key is already in use by another account."
+        tween(KBoxSt,{Color=Color3.fromRGB(255,100,0)},0.1)
+        task.wait(1.2); tween(KBoxSt,{Color=C.stroke},0.3)
+        -- still count as failed attempt
+        if keyAttempts>=MAX_ATTEMPTS then
+            task.wait(0.3)
+            lp:Kick("\n\n[WDG HUB — ACCESS DENIED]\n\nYou have entered invalid keys too many times.\nThis incident has been logged.\n\nGet your key at the WDG Discord server.")
         end
-        tween(fr,       {BackgroundTransparency=1},0.28)
-        tween(og,       {Transparency=1},          0.28)
-        tween(lb,       {TextTransparency=1},      0.22)
-        tween(tl,       {TextTransparency=1},      0.22)
-        tween(iconLbl,  {TextTransparency=1},      0.22)
-        tween(stripe,   {BackgroundTransparency=1},0.22)
-        tween(iconBg,   {BackgroundTransparency=1},0.22)
-        tween(fr, {Position=UDim2.new(1,N_W+30,0,
-            fr.AbsolutePosition.Y-(NotifGui.AbsolutePosition and NotifGui.AbsolutePosition.Y or 0))
-        }, 0.30, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-        task.wait(0.34)
-        for i2,f2 in ipairs(notifList) do if f2==fr then table.remove(notifList,i2); break end end
-        fr:Destroy(); rebuildPos()
-    end)
+    else
+        -- Completely wrong key
+        KErr.TextColor3=Color3.fromRGB(255,60,60)
+        if keyAttempts>=MAX_ATTEMPTS then
+            KErr.Text="  Too many failed attempts."
+            task.wait(0.5)
+            lp:Kick("\n\n[WDG HUB — ACCESS DENIED]\n\nYou have entered an invalid key too many times.\nThis incident has been logged.\n\nGet your key at the WDG Discord server.")
+        else
+            KErr.Text="  Invalid key. "..tostring(MAX_ATTEMPTS-keyAttempts).." attempt(s) remaining."
+            local origPos=KBoxBG.Position
+            task.spawn(function()
+                for i=1,4 do
+                    tween(KBoxBG,{Position=UDim2.new(origPos.X.Scale,origPos.X.Offset+(i%2==0 and 6 or -6),origPos.Y.Scale,origPos.Y.Offset)},0.04)
+                    task.wait(0.05)
+                end
+                KBoxBG.Position=origPos
+            end)
+            tween(KBoxSt,{Color=Color3.fromRGB(255,60,60)},0.1)
+            task.wait(1); tween(KBoxSt,{Color=C.stroke},0.3)
+        end
+    end
 end
 
--- helpers — all respect cooldown except startup
-local function notifyOK(m,t)   notify(m, C.green,  t or "WDG HUB","✓") end
-local function notifyWarn(m,t) notify(m, C.orange, t or "WDG HUB","⚠") end
-local function notifyInfo(m,t) notify(m, C.red1,   t or "WDG HUB","🩸") end
-local function notifyLocked()  notify("🔒 Requires WDG Premium Mode",C.red3,"LOCKED","🔒") end
+KBtn.MouseButton1Click:Connect(tryKey)
+KBox.FocusLost:Connect(function(enter) if enter then tryKey() end end)
+
+-- Wait for key to pass before continuing
+while not _G.__WDGKeyPassed do task.wait(0.05) end
+_G.__WDGKeyPassed=nil
 
 -- ================================================================
---  WELCOME SCREEN
+--  WELCOME SCREEN  (shown only after key passes)
 -- ================================================================
-local WGui = Instance.new("ScreenGui")
+local WGui=Instance.new("ScreenGui")
 WGui.Name="WDGWelcome"; WGui.ResetOnSpawn=false
 WGui.IgnoreGuiInset=true; WGui.DisplayOrder=999999; WGui.Parent=game.CoreGui
 
 local wF=Instance.new("Frame",WGui)
-wF.Size=UDim2.new(0,430,0,106); wF.Position=UDim2.new(0.5,-215,0.5,-53)
+wF.Size=UDim2.new(0,430,0,96); wF.Position=UDim2.new(0.5,-215,0.5,-48)
 wF.BackgroundColor3=C.dark; wF.BorderSizePixel=0; wF.BackgroundTransparency=1
 Instance.new("UICorner",wF).CornerRadius=UDim.new(0,14)
 local wSt=Instance.new("UIStroke",wF); wSt.Color=C.red1; wSt.Thickness=1.8; wSt.Transparency=1
-local wAcc=Instance.new("Frame",wF)
-wAcc.Size=UDim2.new(1,0,0,3); wAcc.BackgroundColor3=C.red1; wAcc.BorderSizePixel=0; wAcc.BackgroundTransparency=1
+local wAcc=Instance.new("Frame",wF); wAcc.Size=UDim2.new(1,0,0,3); wAcc.BackgroundColor3=C.red1; wAcc.BorderSizePixel=0; wAcc.BackgroundTransparency=1
 Instance.new("UICorner",wAcc).CornerRadius=UDim.new(0,14)
-local wT=Instance.new("TextLabel",wF)
-wT.Size=UDim2.new(1,0,0,44); wT.Position=UDim2.new(0,0,0,10); wT.BackgroundTransparency=1
-wT.Text="🩸  Welcome, Member  🩸"; wT.Font=Enum.Font.GothamBold; wT.TextSize=26
+local wT=Instance.new("TextLabel",wF); wT.Size=UDim2.new(1,0,0,44); wT.Position=UDim2.new(0,0,0,10)
+wT.BackgroundTransparency=1; wT.Text="Welcome, Member"; wT.Font=Enum.Font.GothamBold; wT.TextSize=26
 wT.TextColor3=C.red1; wT.TextTransparency=1
-local wS=Instance.new("TextLabel",wF)
-wS.Size=UDim2.new(1,0,0,18); wS.Position=UDim2.new(0,0,0,56); wS.BackgroundTransparency=1
-wS.Text="WDG‐World Demonic Glitch HUB  •  Basic Mode"
+local wS=Instance.new("TextLabel",wF); wS.Size=UDim2.new(1,0,0,18); wS.Position=UDim2.new(0,0,0,56)
+wS.BackgroundTransparency=1; wS.Text="WDG Hub  •  Basic Mode"
 wS.Font=Enum.Font.Gotham; wS.TextSize=13; wS.TextColor3=C.light; wS.TextTransparency=1
-local wC=Instance.new("TextLabel",wF)
-wC.Size=UDim2.new(1,0,0,14); wC.Position=UDim2.new(0,0,0,80); wC.BackgroundTransparency=1
-wC.Text="Created by @Waikiki833 (INFZ3rk)"; wC.Font=Enum.Font.Gotham; wC.TextSize=11
-wC.TextColor3=Color3.fromRGB(160,60,60); wC.TextTransparency=1
+local wC=Instance.new("TextLabel",wF); wC.Size=UDim2.new(1,0,0,14); wC.Position=UDim2.new(0,0,0,78)
+wC.BackgroundTransparency=1; wC.Text="by @Waikiki833  •  WDG Clan"; wC.Font=Enum.Font.Gotham; wC.TextSize=11
+wC.TextColor3=Color3.fromRGB(140,60,60); wC.TextTransparency=1
 
 tween(wF,{BackgroundTransparency=0.06},0.7); tween(wSt,{Transparency=0},0.7)
 tween(wAcc,{BackgroundTransparency=0},0.7); tween(wT,{TextTransparency=0},0.7)
@@ -270,7 +431,7 @@ task.delay(3.8,function()
 end)
 
 -- ================================================================
---  MAIN GUI + FRAME
+--  MAIN GUI
 -- ================================================================
 local SGui=Instance.new("ScreenGui")
 SGui.Name="WDGHub"; SGui.ResetOnSpawn=false
@@ -288,6 +449,61 @@ Glow.Size=UDim2.new(1,80,1,80); Glow.BackgroundTransparency=1
 Glow.Image="rbxassetid://4996891970"; Glow.ImageColor3=C.red2
 Glow.ImageTransparency=0.88; Glow.ZIndex=0; Glow.Visible=false
 
+-- ── Animated background particles (inside CA, defined after CA creation) ──
+local particleConns={}
+local function spawnSnowflake(canvas)
+    local dot=Instance.new("Frame",canvas)
+    local sz=math.random(2,4); dot.Size=UDim2.new(0,sz,0,sz)
+    local canW=canvas.AbsoluteSize.X>0 and canvas.AbsoluteSize.X or 522
+    local canH=canvas.AbsoluteSize.Y>0 and canvas.AbsoluteSize.Y or 404
+    local cx=math.random(0,math.floor(canW)); local cy=0
+    dot.Position=UDim2.new(0,cx,0,cy)
+    dot.BackgroundColor3=C.red1; dot.BackgroundTransparency=math.random(40,60)/100
+    dot.BorderSizePixel=0; dot.ZIndex=2; Instance.new("UICorner",dot).CornerRadius=UDim.new(1,0)
+    local vy=math.random(25,60); local vx=math.random(-12,5)
+    local wobble=math.random(0,100)/100; local wobbleA=math.random(6,18); local wobbleF=math.random(8,16)/10
+    local life=0; local maxLife=(canH/vy)*math.random(90,110)/100
+    local conn
+    conn=RS.Heartbeat:Connect(function(dt)
+        if not dot.Parent then conn:Disconnect(); return end
+        life=life+dt; cx=cx+vx*dt+math.sin((life+wobble)*wobbleF)*wobbleA*dt; cy=cy+vy*dt
+        dot.Position=UDim2.new(0,cx,0,cy)
+        local prog=life/maxLife
+        if prog>=0.6 then dot.BackgroundTransparency=math.min(1,(prog-0.6)/0.4) end
+        if cy>canH+8 or cx<-20 or cx>canW+20 or life>=maxLife then conn:Disconnect(); pcall(function() dot:Destroy() end) end
+    end)
+    table.insert(particleConns,conn)
+end
+
+local function spawnShootingStar(canvas)
+    local star=Instance.new("Frame",canvas)
+    local len=math.random(20,48); star.Size=UDim2.new(0,len,0,2)
+    local canW=canvas.AbsoluteSize.X>0 and canvas.AbsoluteSize.X or 522
+    local canH=canvas.AbsoluteSize.Y>0 and canvas.AbsoluteSize.Y or 404
+    local margin=30
+    local cx=math.random(margin,math.max(margin+1,math.floor(canW)-margin))
+    local cy=math.random(margin,math.max(margin+1,math.floor(canH*0.5)))
+    star.Position=UDim2.new(0,cx,0,cy)
+    star.BackgroundColor3=Color3.fromRGB(255,140,140); star.BackgroundTransparency=0.1
+    star.BorderSizePixel=0; star.ZIndex=2
+    local angle=math.random(20,50); star.Rotation=angle
+    Instance.new("UICorner",star).CornerRadius=UDim.new(1,0)
+    local grad=Instance.new("UIGradient",star)
+    grad.Transparency=NumberSequence.new{NumberSequenceKeypoint.new(0,0),NumberSequenceKeypoint.new(0.55,0.25),NumberSequenceKeypoint.new(1,1)}
+    local rad=math.rad(angle); local spd=math.random(200,380)
+    local dx=math.cos(rad)*spd; local dy=math.sin(rad)*spd
+    local life=0; local maxLife=math.min(math.random(5,9)/10,(canW*0.5)/spd)
+    local conn
+    conn=RS.Heartbeat:Connect(function(dt)
+        if not star.Parent then conn:Disconnect(); return end
+        life=life+dt; cx=cx+dx*dt; cy=cy+dy*dt
+        if cx<0 or cx>canW or cy<0 or cy>canH or life>=maxLife then conn:Disconnect(); pcall(function() star:Destroy() end); return end
+        star.Position=UDim2.new(0,cx,0,cy)
+        star.BackgroundTransparency=math.min(1,life/maxLife)
+    end)
+    table.insert(particleConns,conn)
+end
+
 -- ── Top Bar ──────────────────────────────────────────────────────
 local TB=Instance.new("Frame",MF)
 TB.Size=UDim2.new(1,0,0,46); TB.BackgroundColor3=C.mid; TB.BorderSizePixel=0; TB.ZIndex=5
@@ -299,46 +515,39 @@ AvRing.BackgroundColor3=C.red1; AvRing.BorderSizePixel=0; AvRing.ZIndex=7
 Instance.new("UICorner",AvRing).CornerRadius=UDim.new(1,0)
 local AvImg=Instance.new("ImageLabel",AvRing)
 AvImg.Size=UDim2.new(1,-4,1,-4); AvImg.Position=UDim2.new(0,2,0,2)
-AvImg.BackgroundColor3=Color3.fromRGB(14,3,3); AvImg.BorderSizePixel=0
-AvImg.ZIndex=8; AvImg.ScaleType=Enum.ScaleType.Crop
+AvImg.BackgroundColor3=Color3.fromRGB(14,3,3); AvImg.BorderSizePixel=0; AvImg.ZIndex=8; AvImg.ScaleType=Enum.ScaleType.Crop
 Instance.new("UICorner",AvImg).CornerRadius=UDim.new(1,0)
 local Dot=Instance.new("Frame",AvRing)
 Dot.Size=UDim2.new(0,11,0,11); Dot.Position=UDim2.new(1,-11,1,-11)
 Dot.BackgroundColor3=Color3.fromRGB(50,220,80); Dot.BorderSizePixel=0; Dot.ZIndex=9
-Instance.new("UICorner",Dot).CornerRadius=UDim.new(1,0)
-Instance.new("UIStroke",Dot).Color=C.dark
+Instance.new("UICorner",Dot).CornerRadius=UDim.new(1,0); Instance.new("UIStroke",Dot).Color=C.dark
 task.spawn(function()
-    local ok,url=pcall(function()
-        return PLS:GetUserThumbnailAsync(lp.UserId,Enum.ThumbnailType.HeadShot,Enum.ThumbnailSize.Size48x48)
-    end)
+    local ok,url=pcall(function() return PLS:GetUserThumbnailAsync(lp.UserId,Enum.ThumbnailType.HeadShot,Enum.ThumbnailSize.Size48x48) end)
     if ok and url then AvImg.Image=url end
 end)
 
 local NameLb=Instance.new("TextLabel",TB)
-NameLb.Size=UDim2.new(0,270,0,22); NameLb.Position=UDim2.new(0,50,0,4)
-NameLb.BackgroundTransparency=1; NameLb.Text=lp.Name
+NameLb.Size=UDim2.new(0,300,0,28); NameLb.Position=UDim2.new(0,50,0,9)
+NameLb.BackgroundTransparency=1; NameLb.Text="WDG HUB  •  Basic"
 NameLb.Font=Enum.Font.GothamBold; NameLb.TextSize=15; NameLb.TextColor3=C.red1
 NameLb.TextXAlignment=Enum.TextXAlignment.Left; NameLb.ZIndex=6
-local SubLb=Instance.new("TextLabel",TB)
-SubLb.Size=UDim2.new(0,370,0,16); SubLb.Position=UDim2.new(0,50,0,26)
-SubLb.BackgroundTransparency=1; SubLb.Text="🩸  WDG‐World Demonic Glitch HUB  •  Basic Mode"
-SubLb.Font=Enum.Font.Gotham; SubLb.TextSize=10; SubLb.TextColor3=Color3.fromRGB(140,60,60)
-SubLb.TextXAlignment=Enum.TextXAlignment.Left; SubLb.ZIndex=6
 
-local function mkTopBtn(text,bgCol,txtCol,offX)
+-- Modern top buttons (rounded squares, no emoji issues)
+local function mkTopBtn(text,hoverCol,txtCol,offX)
     local b=Instance.new("TextButton",TB)
-    b.Size=UDim2.new(0,32,0,32); b.Position=UDim2.new(1,offX,0,7)
-    b.BackgroundColor3=bgCol; b.Text=text; b.Font=Enum.Font.GothamBold; b.TextSize=15
-    b.TextColor3=txtCol; b.BorderSizePixel=0; b.ZIndex=10
-    Instance.new("UICorner",b).CornerRadius=UDim.new(0,6)
-    local og=bgCol
-    b.MouseEnter:Connect(function() tween(b,{BackgroundColor3=Color3.new(math.min(og.R+.12,1),math.min(og.G+.06,1),math.min(og.B+.06,1))},0.1) end)
-    b.MouseLeave:Connect(function() tween(b,{BackgroundColor3=og},0.1) end)
+    b.Size=UDim2.new(0,28,0,28); b.Position=UDim2.new(1,offX,0.5,-14)
+    b.BackgroundColor3=Color3.fromRGB(22,6,6); b.Text=text
+    b.Font=Enum.Font.GothamBold; b.TextSize=12; b.TextColor3=txtCol
+    b.BorderSizePixel=0; b.ZIndex=10; b.AutoButtonColor=false
+    Instance.new("UICorner",b).CornerRadius=UDim.new(0,8)
+    local bst=Instance.new("UIStroke",b); bst.Color=C.stroke; bst.Thickness=1; bst.Transparency=0.5
+    b.MouseEnter:Connect(function() tween(b,{BackgroundColor3=hoverCol},0.12); tween(bst,{Transparency=0},0.12) end)
+    b.MouseLeave:Connect(function() tween(b,{BackgroundColor3=Color3.fromRGB(22,6,6)},0.12); tween(bst,{Transparency=0.5},0.12) end)
     return b
 end
-local MinBtn   = mkTopBtn("—",Color3.fromRGB(28,6,6), C.red1,                    -116)
-local MaxBtn   = mkTopBtn("□",Color3.fromRGB(28,6,6), C.red1,                     -80)
-local CloseBtn = mkTopBtn("X",Color3.fromRGB(55,8,8), Color3.fromRGB(255,80,80),  -42)
+local MinBtn   = mkTopBtn("-",  Color3.fromRGB(55,12,12), C.light,                     -112)
+local MaxBtn   = mkTopBtn("+",  Color3.fromRGB(55,12,12), C.light,                      -80)
+local CloseBtn = mkTopBtn("x",  Color3.fromRGB(140,15,15), Color3.fromRGB(255,80,80),   -48)
 
 -- ── Sidebar ──────────────────────────────────────────────────────
 local SB=Instance.new("Frame",MF)
@@ -369,70 +578,73 @@ local Scroll=Instance.new("ScrollingFrame",CA)
 Scroll.Size=UDim2.new(1,0,1,-44); Scroll.Position=UDim2.new(0,0,0,44)
 Scroll.BackgroundTransparency=1; Scroll.BorderSizePixel=0
 Scroll.ScrollBarThickness=4; Scroll.ScrollBarImageColor3=C.red2
-Scroll.CanvasSize=UDim2.new(0,0,0,0)
-Scroll.ScrollingDirection=Enum.ScrollingDirection.Y; Scroll.ZIndex=2
+Scroll.CanvasSize=UDim2.new(0,0,0,0); Scroll.ScrollingDirection=Enum.ScrollingDirection.Y; Scroll.ZIndex=2
+
+-- Start particle spawner (CA is ready)
+task.spawn(function()
+    task.wait(1.2)
+    for i=1,12 do task.wait(0.1); if MF.Visible then spawnSnowflake(CA) end end
+    local sTimer=0; local sInt=math.random(15,30)/10
+    local bTimer=0; local bInt=math.random(60,110)/10
+    while SGui and SGui.Parent do
+        local dt=task.wait(0.05)
+        if not MF.Visible then continue end
+        sTimer=sTimer+dt; bTimer=bTimer+dt
+        if sTimer>=math.random(5,11)/10 then sTimer=0; spawnSnowflake(CA) end
+        if sTimer>=sInt then sTimer=0; sInt=math.random(15,30)/10; spawnShootingStar(CA) end
+        if bTimer>=bInt then
+            bTimer=0; bInt=math.random(60,110)/10
+            task.spawn(function() for i=1,math.random(2,4) do spawnShootingStar(CA); task.wait(math.random(8,18)/100) end end)
+        end
+    end
+end)
 
 -- ── Resize handle ────────────────────────────────────────────────
 local RH=Instance.new("Frame",MF)
-RH.Size=UDim2.new(0,26,0,26); RH.AnchorPoint=Vector2.new(1,1); RH.Position=UDim2.new(1,0,1,0)
-RH.BackgroundTransparency=1; RH.BorderSizePixel=0; RH.ZIndex=30; RH.Active=true
-local armV=Instance.new("Frame",RH)
-armV.AnchorPoint=Vector2.new(1,1); armV.Size=UDim2.new(0,5,1,0); armV.Position=UDim2.new(1,0,1,0)
-armV.BackgroundColor3=C.red1; armV.BorderSizePixel=0; armV.ZIndex=31
-Instance.new("UICorner",armV).CornerRadius=UDim.new(0,3)
-local armH=Instance.new("Frame",RH)
-armH.AnchorPoint=Vector2.new(1,1); armH.Size=UDim2.new(1,0,0,5); armH.Position=UDim2.new(1,0,1,0)
-armH.BackgroundColor3=C.red1; armH.BorderSizePixel=0; armH.ZIndex=31
-Instance.new("UICorner",armH).CornerRadius=UDim.new(0,3)
-RH.MouseEnter:Connect(function() tween(armV,{BackgroundColor3=C.white},0.1); tween(armH,{BackgroundColor3=C.white},0.1) end)
-RH.MouseLeave:Connect(function() tween(armV,{BackgroundColor3=C.red1},0.1);  tween(armH,{BackgroundColor3=C.red1},0.1)  end)
+RH.Size=UDim2.new(0,28,0,28); RH.AnchorPoint=Vector2.new(1,1); RH.Position=UDim2.new(1,-3,1,-3)
+RH.BackgroundColor3=Color3.fromRGB(20,5,5); RH.BackgroundTransparency=0.3
+RH.BorderSizePixel=0; RH.ZIndex=30; RH.Active=true
+Instance.new("UICorner",RH).CornerRadius=UDim.new(0,8)
+local RHst=Instance.new("UIStroke",RH); RHst.Color=C.stroke; RHst.Thickness=1; RHst.Transparency=0.4
+local armV=Instance.new("Frame",RH); armV.AnchorPoint=Vector2.new(1,1); armV.Size=UDim2.new(0,4,0,16); armV.Position=UDim2.new(1,-6,1,-6)
+armV.BackgroundColor3=C.red1; armV.BorderSizePixel=0; armV.ZIndex=31; Instance.new("UICorner",armV).CornerRadius=UDim.new(1,0)
+local armH=Instance.new("Frame",RH); armH.AnchorPoint=Vector2.new(1,1); armH.Size=UDim2.new(0,16,0,4); armH.Position=UDim2.new(1,-6,1,-6)
+armH.BackgroundColor3=C.red1; armH.BorderSizePixel=0; armH.ZIndex=31; Instance.new("UICorner",armH).CornerRadius=UDim.new(1,0)
+RH.MouseEnter:Connect(function() tween(RH,{BackgroundTransparency=0.05},0.12); tween(armV,{BackgroundColor3=C.white},0.1); tween(armH,{BackgroundColor3=C.white},0.1) end)
+RH.MouseLeave:Connect(function() tween(RH,{BackgroundTransparency=0.3},0.12); tween(armV,{BackgroundColor3=C.red1},0.1); tween(armH,{BackgroundColor3=C.red1},0.1) end)
 
 -- ================================================================
 --  TAB SYSTEM
 -- ================================================================
-local tabF={} local tabB={} local curTab=""
+local tabF={}; local tabB={}; local curTab=""
 local TABS={
-    {n="Home",     i="🏠"},
-    {n="Movement", i="🏃"},
-    {n="Combat",   i="⚔️"},
-    {n="Visuals",  i="👁"},
-    {n="Player",   i="🧍"},
-    {n="World",    i="🌍"},
-    {n="Troll",    i="😈"},
-    {n="Extras",   i="🎮"},
-    {n="Config",   i="⚙️"},
+    {n="Home",     i="🏠"}, {n="Movement", i="🏃"}, {n="Combat",   i="⚔️"},
+    {n="Visuals",  i="👁"},  {n="Player",   i="🧍"}, {n="World",    i="🌍"},
+    {n="Troll",    i="😈"},  {n="Extras",   i="🎮"}, {n="Config",   i="⚙️"},
 }
 
 local function mkTab(name)
     if tabF[name] then return tabF[name] end
     local f=Instance.new("Frame",Scroll)
     f.Size=UDim2.new(1,0,1,0); f.BackgroundTransparency=1; f.Visible=false; f.ZIndex=2
-    local lay=Instance.new("UIListLayout",f)
-    lay.Padding=UDim.new(0,6); lay.HorizontalAlignment=Enum.HorizontalAlignment.Center
-    lay.SortOrder=Enum.SortOrder.LayoutOrder
-    local pad=Instance.new("UIPadding",f)
-    pad.PaddingTop=UDim.new(0,8); pad.PaddingLeft=UDim.new(0,8)
-    pad.PaddingRight=UDim.new(0,8); pad.PaddingBottom=UDim.new(0,14)
+    local lay=Instance.new("UIListLayout",f); lay.Padding=UDim.new(0,6); lay.HorizontalAlignment=Enum.HorizontalAlignment.Center; lay.SortOrder=Enum.SortOrder.LayoutOrder
+    local pad=Instance.new("UIPadding",f); pad.PaddingTop=UDim.new(0,8); pad.PaddingLeft=UDim.new(0,8); pad.PaddingRight=UDim.new(0,8); pad.PaddingBottom=UDim.new(0,14)
     tabF[name]=f; return f
 end
-
 local function refreshCanvas(name)
     local f=tabF[name]; if not f then return end
     local lay=f:FindFirstChildOfClass("UIListLayout")
     if lay then Scroll.CanvasSize=UDim2.new(0,0,0,lay.AbsoluteContentSize.Y+26) end
 end
-
 local function switchTab(name)
     curTab=name; SecT.Text=name
     for n,f in pairs(tabF) do f.Visible=(n==name) end
     for n,b in pairs(tabB) do
         local a=(n==name)
-        tween(b,{BackgroundColor3=a and C.red1 or Color3.fromRGB(18,5,5),
-                 TextColor3=a and C.black or C.light},0.13)
+        tween(b,{BackgroundColor3=a and C.red1 or Color3.fromRGB(18,5,5), TextColor3=a and C.black or C.light},0.13)
     end
     Scroll.CanvasPosition=Vector2.new(0,0); task.wait(); refreshCanvas(name)
 end
-
 for _,t in ipairs(TABS) do
     mkTab(t.n)
     local b=Instance.new("TextButton",SB)
@@ -440,7 +652,7 @@ for _,t in ipairs(TABS) do
     b.Text=t.i.."  "..t.n; b.Font=Enum.Font.Gotham; b.TextSize=10
     b.TextColor3=C.light; b.TextXAlignment=Enum.TextXAlignment.Left; b.BorderSizePixel=0; b.ZIndex=5
     Instance.new("UICorner",b).CornerRadius=UDim.new(0,6)
-    local bp=Instance.new("UIPadding",b); bp.PaddingLeft=UDim.new(0,8)
+    Instance.new("UIPadding",b).PaddingLeft=UDim.new(0,8)
     local n=t.n
     b.MouseEnter:Connect(function() if curTab~=n then tween(b,{BackgroundColor3=Color3.fromRGB(30,8,8)},0.1) end end)
     b.MouseLeave:Connect(function() if curTab~=n then tween(b,{BackgroundColor3=Color3.fromRGB(18,5,5)},0.1) end end)
@@ -451,163 +663,97 @@ end
 -- ================================================================
 --  UI BUILDERS
 -- ================================================================
-local function sec(parent, text)
+local function sec(parent,text)
     local w=Instance.new("Frame",parent); w.Size=UDim2.new(1,0,0,20); w.BackgroundTransparency=1
     local lb=Instance.new("TextLabel",w); lb.Size=UDim2.new(1,0,1,0); lb.BackgroundTransparency=1
-    lb.Text="▸  "..text:upper(); lb.Font=Enum.Font.GothamBold; lb.TextSize=10
+    lb.Text=">>  "..text:upper(); lb.Font=Enum.Font.GothamBold; lb.TextSize=10
     lb.TextColor3=Color3.fromRGB(150,45,45); lb.TextXAlignment=Enum.TextXAlignment.Left; lb.ZIndex=3
     local li=Instance.new("Frame",w); li.Size=UDim2.new(0.5,0,0,1); li.Position=UDim2.new(0,0,1,-1)
     li.BackgroundColor3=C.stroke; li.BorderSizePixel=0
 end
-
 local function inf(parent,text,h)
     h=h or 44
     local lb=Instance.new("TextLabel",parent)
     lb.Size=UDim2.new(1,0,0,h); lb.BackgroundColor3=Color3.fromRGB(13,3,3)
     lb.Text=text; lb.Font=Enum.Font.Gotham; lb.TextSize=12
-    lb.TextColor3=Color3.fromRGB(200,120,120); lb.TextWrapped=true
-    lb.BorderSizePixel=0; lb.TextXAlignment=Enum.TextXAlignment.Left; lb.ZIndex=3
+    lb.TextColor3=Color3.fromRGB(200,120,120); lb.TextWrapped=true; lb.BorderSizePixel=0
+    lb.TextXAlignment=Enum.TextXAlignment.Left; lb.ZIndex=3
     Instance.new("UICorner",lb).CornerRadius=UDim.new(0,8)
     local p=Instance.new("UIPadding",lb); p.PaddingLeft=UDim.new(0,10); p.PaddingRight=UDim.new(0,10)
 end
-
 local function btn(parent,text,col,cb)
     col=col or Color3.fromRGB(28,6,6)
     local b=Instance.new("TextButton",parent)
     b.Size=UDim2.new(1,0,0,36); b.BackgroundColor3=col; b.Text=text
-    b.Font=Enum.Font.GothamBold; b.TextSize=12.5; b.TextColor3=C.white; b.BorderSizePixel=0; b.ZIndex=3
+    b.Font=Enum.Font.GothamBold; b.TextSize=12.5; b.TextColor3=C.white; b.BorderSizePixel=0; b.ZIndex=3; b.AutoButtonColor=false
     Instance.new("UICorner",b).CornerRadius=UDim.new(0,8)
     local og=col
     b.MouseEnter:Connect(function() tween(b,{BackgroundColor3=Color3.new(math.min(og.R+.1,1),math.min(og.G+.05,1),math.min(og.B+.05,1))},0.1) end)
     b.MouseLeave:Connect(function() tween(b,{BackgroundColor3=og},0.1) end)
     b.MouseButton1Click:Connect(cb); return b
 end
-
 local function sld(parent,label,mn,mx,def,cb)
     local row=Instance.new("Frame",parent)
     row.Size=UDim2.new(1,0,0,56); row.BackgroundColor3=Color3.fromRGB(15,4,4); row.BorderSizePixel=0; row.ZIndex=3
-    Instance.new("UICorner",row).CornerRadius=UDim.new(0,8)
-    Instance.new("UIStroke",row).Color=Color3.fromRGB(35,10,10)
-    local lb=Instance.new("TextLabel",row)
-    lb.Size=UDim2.new(1,-10,0,22); lb.Position=UDim2.new(0,10,0,4); lb.BackgroundTransparency=1
-    lb.Text=label..":  "..tostring(def); lb.Font=Enum.Font.Gotham; lb.TextSize=12; lb.TextColor3=C.light
-    lb.TextXAlignment=Enum.TextXAlignment.Left; lb.ZIndex=4
-    local tr=Instance.new("Frame",row)
-    tr.Size=UDim2.new(1,-20,0,8); tr.Position=UDim2.new(0,10,0,36)
-    tr.BackgroundColor3=Color3.fromRGB(26,6,6); tr.BorderSizePixel=0; tr.ZIndex=4
-    Instance.new("UICorner",tr).CornerRadius=UDim.new(0,4)
-    local fl=Instance.new("Frame",tr)
-    fl.Size=UDim2.new((def-mn)/(mx-mn),0,1,0); fl.BackgroundColor3=C.red1; fl.BorderSizePixel=0; fl.ZIndex=5
-    Instance.new("UICorner",fl).CornerRadius=UDim.new(0,4)
-    local hd=Instance.new("Frame",fl)
-    hd.Size=UDim2.new(0,14,0,14); hd.AnchorPoint=Vector2.new(0.5,0.5); hd.Position=UDim2.new(1,0,0.5,0)
-    hd.BackgroundColor3=C.white; hd.BorderSizePixel=0; hd.ZIndex=6
-    Instance.new("UICorner",hd).CornerRadius=UDim.new(1,0)
+    Instance.new("UICorner",row).CornerRadius=UDim.new(0,8); Instance.new("UIStroke",row).Color=Color3.fromRGB(35,10,10)
+    local lb=Instance.new("TextLabel",row); lb.Size=UDim2.new(1,-10,0,22); lb.Position=UDim2.new(0,10,0,4)
+    lb.BackgroundTransparency=1; lb.Text=label..":  "..tostring(def); lb.Font=Enum.Font.Gotham; lb.TextSize=12; lb.TextColor3=C.light; lb.TextXAlignment=Enum.TextXAlignment.Left; lb.ZIndex=4
+    local tr=Instance.new("Frame",row); tr.Size=UDim2.new(1,-20,0,8); tr.Position=UDim2.new(0,10,0,36); tr.BackgroundColor3=Color3.fromRGB(26,6,6); tr.BorderSizePixel=0; tr.ZIndex=4; Instance.new("UICorner",tr).CornerRadius=UDim.new(0,4)
+    local fl=Instance.new("Frame",tr); fl.Size=UDim2.new((def-mn)/(mx-mn),0,1,0); fl.BackgroundColor3=C.red1; fl.BorderSizePixel=0; fl.ZIndex=5; Instance.new("UICorner",fl).CornerRadius=UDim.new(0,4)
+    local hd=Instance.new("Frame",fl); hd.Size=UDim2.new(0,14,0,14); hd.AnchorPoint=Vector2.new(0.5,0.5); hd.Position=UDim2.new(1,0,0.5,0); hd.BackgroundColor3=C.white; hd.BorderSizePixel=0; hd.ZIndex=6; Instance.new("UICorner",hd).CornerRadius=UDim.new(1,0)
     local drag=false
     local function upd(x)
         local pct=math.clamp((x-tr.AbsolutePosition.X)/tr.AbsoluteSize.X,0,1)
-        local val=math.floor(mn+pct*(mx-mn))
-        fl.Size=UDim2.new(pct,0,1,0); lb.Text=label..":  "..tostring(val)
-        if cb then cb(val) end
+        local val=math.floor(mn+pct*(mx-mn)); fl.Size=UDim2.new(pct,0,1,0); lb.Text=label..":  "..tostring(val); if cb then cb(val) end
     end
     tr.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=true; upd(i.Position.X) end end)
     tr.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=false end end)
-    local sc=UIS.InputChanged:Connect(function(i)
-        if drag and i.UserInputType==Enum.UserInputType.MouseMovement then upd(i.Position.X) end
-    end)
-    table.insert(conns,sc)
+    table.insert(conns,UIS.InputChanged:Connect(function(i) if drag and i.UserInputType==Enum.UserInputType.MouseMovement then upd(i.Position.X) end end))
 end
-
 local function grid(parent)
     local g=Instance.new("Frame",parent); g.Size=UDim2.new(1,0,0,54); g.BackgroundTransparency=1; g.ZIndex=3
-    local l=Instance.new("UIListLayout",g)
-    l.FillDirection=Enum.FillDirection.Horizontal; l.Padding=UDim.new(0,6)
-    l.HorizontalAlignment=Enum.HorizontalAlignment.Left; l.SortOrder=Enum.SortOrder.LayoutOrder
+    local l=Instance.new("UIListLayout",g); l.FillDirection=Enum.FillDirection.Horizontal; l.Padding=UDim.new(0,6); l.HorizontalAlignment=Enum.HorizontalAlignment.Left; l.SortOrder=Enum.SortOrder.LayoutOrder
     return g
 end
 local function card(parent,title,val)
-    local c=Instance.new("Frame",parent)
-    c.Size=UDim2.new(0.48,0,0,54); c.BackgroundColor3=Color3.fromRGB(17,4,4); c.BorderSizePixel=0; c.ZIndex=3
-    Instance.new("UICorner",c).CornerRadius=UDim.new(0,8)
-    Instance.new("UIStroke",c).Color=Color3.fromRGB(50,14,14)
-    local t=Instance.new("TextLabel",c); t.Size=UDim2.new(1,-8,0,18); t.Position=UDim2.new(0,8,0,4)
-    t.BackgroundTransparency=1; t.Text=title; t.Font=Enum.Font.Gotham; t.TextSize=10
-    t.TextColor3=Color3.fromRGB(130,55,55); t.TextXAlignment=Enum.TextXAlignment.Left; t.ZIndex=4
-    local v=Instance.new("TextLabel",c); v.Size=UDim2.new(1,-8,0,22); v.Position=UDim2.new(0,8,0,24)
-    v.BackgroundTransparency=1; v.Text=val; v.Font=Enum.Font.GothamBold; v.TextSize=13
-    v.TextColor3=C.red1; v.TextXAlignment=Enum.TextXAlignment.Left; v.ZIndex=4
+    local c=Instance.new("Frame",parent); c.Size=UDim2.new(0.48,0,0,54); c.BackgroundColor3=Color3.fromRGB(17,4,4); c.BorderSizePixel=0; c.ZIndex=3
+    Instance.new("UICorner",c).CornerRadius=UDim.new(0,8); Instance.new("UIStroke",c).Color=Color3.fromRGB(50,14,14)
+    local t=Instance.new("TextLabel",c); t.Size=UDim2.new(1,-8,0,18); t.Position=UDim2.new(0,8,0,4); t.BackgroundTransparency=1; t.Text=title; t.Font=Enum.Font.Gotham; t.TextSize=10; t.TextColor3=Color3.fromRGB(130,55,55); t.TextXAlignment=Enum.TextXAlignment.Left; t.ZIndex=4
+    local v=Instance.new("TextLabel",c); v.Size=UDim2.new(1,-8,0,22); v.Position=UDim2.new(0,8,0,24); v.BackgroundTransparency=1; v.Text=val; v.Font=Enum.Font.GothamBold; v.TextSize=13; v.TextColor3=C.red1; v.TextXAlignment=Enum.TextXAlignment.Left; v.ZIndex=4
     return c,v
 end
-
--- ================================================================
---  PANEL ROW  —  two-column layout
---  Heights are EXACT: inner = panelH - 32,  each item + gap(2)
---  Formula:  panelH = sum(itemHeights) + (n-1)*2 + 32 + 6(buffer)
--- ================================================================
-local function panelRow(parent, lTitle, rTitle, lH, rH)
+local function panelRow(parent,lTitle,rTitle,lH,rH)
     lH=lH or 160; rH=rH or 160
-    local maxH=math.max(lH,rH)
-    local holder=Instance.new("Frame",parent)
-    holder.Size=UDim2.new(1,0,0,maxH); holder.BackgroundTransparency=1; holder.ZIndex=2
+    local holder=Instance.new("Frame",parent); holder.Size=UDim2.new(1,0,0,math.max(lH,rH)); holder.BackgroundTransparency=1; holder.ZIndex=2
     local function mkPanel(title,xScale,xOffset,w,h)
-        local fr=Instance.new("Frame",holder)
-        fr.Size=UDim2.new(w,-4,0,h); fr.Position=UDim2.new(xScale,xOffset,0,0)
-        fr.BackgroundColor3=Color3.fromRGB(15,4,4); fr.BorderSizePixel=0; fr.ZIndex=3
-        fr.ClipsDescendants=true                          -- prevents overflow
-        Instance.new("UICorner",fr).CornerRadius=UDim.new(0,8)
-        Instance.new("UIStroke",fr).Color=Color3.fromRGB(35,10,10)
-        local tl=Instance.new("TextLabel",fr)
-        tl.Size=UDim2.new(1,-12,0,20); tl.Position=UDim2.new(0,8,0,5); tl.BackgroundTransparency=1
-        tl.Text=title:upper(); tl.Font=Enum.Font.GothamBold; tl.TextSize=9
-        tl.TextColor3=Color3.fromRGB(150,45,45); tl.TextXAlignment=Enum.TextXAlignment.Left; tl.ZIndex=4
-        local dv=Instance.new("Frame",fr)
-        dv.Size=UDim2.new(1,-16,0,1); dv.Position=UDim2.new(0,8,0,26)
-        dv.BackgroundColor3=C.stroke; dv.BorderSizePixel=0
-        local inner=Instance.new("Frame",fr)
-        inner.Size=UDim2.new(1,-10,0,h-34)              -- exact height, no overflow
-        inner.Position=UDim2.new(0,5,0,29)
-        inner.BackgroundTransparency=1; inner.ZIndex=3
-        local lay=Instance.new("UIListLayout",inner)
-        lay.Padding=UDim.new(0,2); lay.SortOrder=Enum.SortOrder.LayoutOrder
-        lay.HorizontalAlignment=Enum.HorizontalAlignment.Center
+        local fr=Instance.new("Frame",holder); fr.Size=UDim2.new(w,-4,0,h); fr.Position=UDim2.new(xScale,xOffset,0,0)
+        fr.BackgroundColor3=Color3.fromRGB(15,4,4); fr.BorderSizePixel=0; fr.ZIndex=3; fr.ClipsDescendants=true
+        Instance.new("UICorner",fr).CornerRadius=UDim.new(0,8); Instance.new("UIStroke",fr).Color=Color3.fromRGB(35,10,10)
+        local tl=Instance.new("TextLabel",fr); tl.Size=UDim2.new(1,-12,0,20); tl.Position=UDim2.new(0,8,0,5); tl.BackgroundTransparency=1
+        tl.Text=title:upper(); tl.Font=Enum.Font.GothamBold; tl.TextSize=9; tl.TextColor3=Color3.fromRGB(150,45,45); tl.TextXAlignment=Enum.TextXAlignment.Left; tl.ZIndex=4
+        local dv=Instance.new("Frame",fr); dv.Size=UDim2.new(1,-16,0,1); dv.Position=UDim2.new(0,8,0,26); dv.BackgroundColor3=C.stroke; dv.BorderSizePixel=0
+        local inner=Instance.new("Frame",fr); inner.Size=UDim2.new(1,-10,0,h-34); inner.Position=UDim2.new(0,5,0,29); inner.BackgroundTransparency=1; inner.ZIndex=3
+        local lay=Instance.new("UIListLayout",inner); lay.Padding=UDim.new(0,2); lay.SortOrder=Enum.SortOrder.LayoutOrder; lay.HorizontalAlignment=Enum.HorizontalAlignment.Center
         return inner
     end
     return holder, mkPanel(lTitle,0,0,0.5,lH), mkPanel(rTitle,0.5,4,0.5,rH)
 end
-
--- Compact checkbox — 100% silent
 local function chk(parent,label,stateKey,onCB,offCB,keyLabel)
-    local row=Instance.new("Frame",parent)
-    row.Size=UDim2.new(1,0,0,27); row.BackgroundTransparency=1; row.ZIndex=3
-    local box=Instance.new("Frame",row)
-    box.Size=UDim2.new(0,16,0,16); box.Position=UDim2.new(0,2,0.5,-8)
-    box.BackgroundColor3=Color3.fromRGB(22,5,5); box.BorderSizePixel=0; box.ZIndex=4
-    Instance.new("UICorner",box).CornerRadius=UDim.new(0,3)
+    local row=Instance.new("Frame",parent); row.Size=UDim2.new(1,0,0,27); row.BackgroundTransparency=1; row.ZIndex=3
+    local box=Instance.new("Frame",row); box.Size=UDim2.new(0,16,0,16); box.Position=UDim2.new(0,2,0.5,-8); box.BackgroundColor3=Color3.fromRGB(22,5,5); box.BorderSizePixel=0; box.ZIndex=4; Instance.new("UICorner",box).CornerRadius=UDim.new(0,3)
     local bst=Instance.new("UIStroke",box); bst.Color=Color3.fromRGB(70,18,18); bst.Thickness=1.1
-    local check=Instance.new("TextLabel",box)
-    check.Size=UDim2.new(1,0,1,0); check.BackgroundTransparency=1; check.Text=""
-    check.Font=Enum.Font.GothamBold; check.TextSize=11; check.TextColor3=C.white; check.ZIndex=5
-    local lblW=keyLabel and -52 or -28
-    local lb=Instance.new("TextLabel",row)
-    lb.Size=UDim2.new(1,lblW,1,0); lb.Position=UDim2.new(0,22,0,0)
-    lb.BackgroundTransparency=1; lb.Text=label; lb.Font=Enum.Font.Gotham; lb.TextSize=11.5
-    lb.TextColor3=C.light; lb.TextXAlignment=Enum.TextXAlignment.Left; lb.ZIndex=4
+    local check=Instance.new("TextLabel",box); check.Size=UDim2.new(1,0,1,0); check.BackgroundTransparency=1; check.Text=""; check.Font=Enum.Font.GothamBold; check.TextSize=11; check.TextColor3=C.white; check.ZIndex=5
+    local lb=Instance.new("TextLabel",row); lb.Size=UDim2.new(1,keyLabel and -52 or -28,1,0); lb.Position=UDim2.new(0,22,0,0); lb.BackgroundTransparency=1; lb.Text=label; lb.Font=Enum.Font.Gotham; lb.TextSize=11.5; lb.TextColor3=C.light; lb.TextXAlignment=Enum.TextXAlignment.Left; lb.ZIndex=4
     if keyLabel then
-        local kb=Instance.new("TextLabel",row)
-        kb.Size=UDim2.new(0,24,0,16); kb.Position=UDim2.new(1,-26,0.5,-8)
-        kb.BackgroundColor3=Color3.fromRGB(22,5,5); kb.BorderSizePixel=0; kb.Text=keyLabel
-        kb.Font=Enum.Font.GothamBold; kb.TextSize=10; kb.TextColor3=C.red1; kb.ZIndex=5
-        Instance.new("UICorner",kb).CornerRadius=UDim.new(0,4)
-        local kst=Instance.new("UIStroke",kb); kst.Color=C.red1; kst.Thickness=1; kst.Transparency=0.4
+        local kb=Instance.new("TextLabel",row); kb.Size=UDim2.new(0,24,0,16); kb.Position=UDim2.new(1,-26,0.5,-8); kb.BackgroundColor3=Color3.fromRGB(22,5,5); kb.BorderSizePixel=0; kb.Text=keyLabel; kb.Font=Enum.Font.GothamBold; kb.TextSize=10; kb.TextColor3=C.red1; kb.ZIndex=5; Instance.new("UICorner",kb).CornerRadius=UDim.new(0,4)
+        Instance.new("UIStroke",kb).Color=C.red1
     end
-    local clickBtn=Instance.new("TextButton",row)
-    clickBtn.Size=UDim2.new(1,0,1,0); clickBtn.BackgroundTransparency=1; clickBtn.Text=""; clickBtn.ZIndex=6
+    local clickBtn=Instance.new("TextButton",row); clickBtn.Size=UDim2.new(1,0,1,0); clickBtn.BackgroundTransparency=1; clickBtn.Text=""; clickBtn.ZIndex=6; clickBtn.AutoButtonColor=false
     local state=false
     local function setState(v)
-        state=v
-        if stateKey then T[stateKey]=v end
-        if v then tween(box,{BackgroundColor3=C.red1},0.13); check.Text="✓"; if onCB then onCB() end
-        else  tween(box,{BackgroundColor3=Color3.fromRGB(22,5,5)},0.13); check.Text=""; if offCB then offCB() end end
+        state=v; if stateKey then T[stateKey]=v end
+        if v then tween(box,{BackgroundColor3=C.red1},0.13); check.Text="v"; if onCB then onCB() end
+        else tween(box,{BackgroundColor3=Color3.fromRGB(22,5,5)},0.13); check.Text=""; if offCB then offCB() end end
     end
     clickBtn.MouseButton1Click:Connect(function() setState(not state) end)
     clickBtn.MouseEnter:Connect(function() if not state then tween(box,{BackgroundColor3=Color3.fromRGB(35,8,8)},0.1) end end)
@@ -615,41 +761,26 @@ local function chk(parent,label,stateKey,onCB,offCB,keyLabel)
     if stateKey then togRefs[stateKey]={setState=setState,getState=function() return state end} end
     return row,setState
 end
-
 local function lckChk(parent,label)
     local row=Instance.new("Frame",parent); row.Size=UDim2.new(1,0,0,27); row.BackgroundTransparency=1; row.ZIndex=3
-    local box=Instance.new("Frame",row); box.Size=UDim2.new(0,16,0,16); box.Position=UDim2.new(0,2,0.5,-8)
-    box.BackgroundColor3=Color3.fromRGB(14,3,3); box.BorderSizePixel=0; box.ZIndex=4
-    Instance.new("UICorner",box).CornerRadius=UDim.new(0,3)
-    local bst=Instance.new("UIStroke",box); bst.Color=Color3.fromRGB(40,10,10); bst.Thickness=1; bst.Transparency=0.5
-    local lb=Instance.new("TextLabel",row); lb.Size=UDim2.new(1,-46,1,0); lb.Position=UDim2.new(0,22,0,0)
-    lb.BackgroundTransparency=1; lb.Text=label; lb.Font=Enum.Font.Gotham; lb.TextSize=11
-    lb.TextColor3=Color3.fromRGB(70,25,25); lb.TextXAlignment=Enum.TextXAlignment.Left; lb.ZIndex=4
-    local badge=Instance.new("TextLabel",row); badge.Size=UDim2.new(0,20,0,16); badge.Position=UDim2.new(1,-22,0.5,-8)
-    badge.BackgroundColor3=Color3.fromRGB(18,4,4); badge.Text="🔒"; badge.Font=Enum.Font.GothamBold; badge.TextSize=10
-    badge.TextColor3=Color3.fromRGB(100,30,30); badge.BorderSizePixel=0; badge.ZIndex=4
-    Instance.new("UICorner",badge).CornerRadius=UDim.new(0,4)
-    local cz=Instance.new("TextButton",row); cz.Size=UDim2.new(1,0,1,0); cz.BackgroundTransparency=1; cz.Text=""; cz.ZIndex=5
+    local box=Instance.new("Frame",row); box.Size=UDim2.new(0,16,0,16); box.Position=UDim2.new(0,2,0.5,-8); box.BackgroundColor3=Color3.fromRGB(14,3,3); box.BorderSizePixel=0; box.ZIndex=4; Instance.new("UICorner",box).CornerRadius=UDim.new(0,3)
+    Instance.new("UIStroke",box).Color=Color3.fromRGB(40,10,10)
+    local lb=Instance.new("TextLabel",row); lb.Size=UDim2.new(1,-46,1,0); lb.Position=UDim2.new(0,22,0,0); lb.BackgroundTransparency=1; lb.Text=label; lb.Font=Enum.Font.Gotham; lb.TextSize=11; lb.TextColor3=Color3.fromRGB(70,25,25); lb.TextXAlignment=Enum.TextXAlignment.Left; lb.ZIndex=4
+    local badge=Instance.new("TextLabel",row); badge.Size=UDim2.new(0,22,0,16); badge.Position=UDim2.new(1,-24,0.5,-8); badge.BackgroundColor3=Color3.fromRGB(18,4,4); badge.Text="P"; badge.Font=Enum.Font.GothamBold; badge.TextSize=9; badge.TextColor3=Color3.fromRGB(100,30,30); badge.BorderSizePixel=0; badge.ZIndex=4; Instance.new("UICorner",badge).CornerRadius=UDim.new(0,4)
+    local cz=Instance.new("TextButton",row); cz.Size=UDim2.new(1,0,1,0); cz.BackgroundTransparency=1; cz.Text=""; cz.ZIndex=5; cz.AutoButtonColor=false
     cz.MouseButton1Click:Connect(notifyLocked)
 end
-
 local function btnS(parent,text,col,cb)
     col=col or Color3.fromRGB(28,6,6)
-    local b=Instance.new("TextButton",parent)
-    b.Size=UDim2.new(1,0,0,28); b.BackgroundColor3=col; b.Text=text
-    b.Font=Enum.Font.GothamBold; b.TextSize=11; b.TextColor3=C.white; b.BorderSizePixel=0; b.ZIndex=4
+    local b=Instance.new("TextButton",parent); b.Size=UDim2.new(1,0,0,28); b.BackgroundColor3=col; b.Text=text; b.Font=Enum.Font.GothamBold; b.TextSize=11; b.TextColor3=C.white; b.BorderSizePixel=0; b.ZIndex=4; b.AutoButtonColor=false
     Instance.new("UICorner",b).CornerRadius=UDim.new(0,6)
     local og=col
     b.MouseEnter:Connect(function() tween(b,{BackgroundColor3=Color3.new(math.min(og.R+.1,1),math.min(og.G+.05,1),math.min(og.B+.05,1))},0.1) end)
     b.MouseLeave:Connect(function() tween(b,{BackgroundColor3=og},0.1) end)
     b.MouseButton1Click:Connect(cb); return b
 end
-
 local function panSec(parent,text)
-    local lb=Instance.new("TextLabel",parent)
-    lb.Size=UDim2.new(1,0,0,16); lb.BackgroundTransparency=1; lb.Text="— "..text
-    lb.Font=Enum.Font.GothamBold; lb.TextSize=9; lb.TextColor3=Color3.fromRGB(120,35,35)
-    lb.TextXAlignment=Enum.TextXAlignment.Left; lb.ZIndex=5
+    local lb=Instance.new("TextLabel",parent); lb.Size=UDim2.new(1,0,0,16); lb.BackgroundTransparency=1; lb.Text="-- "..text; lb.Font=Enum.Font.GothamBold; lb.TextSize=9; lb.TextColor3=Color3.fromRGB(120,35,35); lb.TextXAlignment=Enum.TextXAlignment.Left; lb.ZIndex=5
 end
 
 -- ================================================================
@@ -658,88 +789,69 @@ end
 do
     local f=mkTab("Home")
     sec(f,"Welcome")
-    inf(f,"🩸  WDG‐World Demonic Glitch HUB  —  Basic Mode\nWelcome, Member. Use the tabs on the left to navigate.",44)
-    sec(f,"HUB Information")
-    inf(f,"🛠️  Created by: @Waikiki833 (INFZ3rk)\n📌  Version: 1.0  •  Mode: Basic\n🔒  Upgrade to Premium to unlock all features.",52)
+    inf(f,"WDG Hub  --  Basic Mode\nWelcome, Member. Use the tabs on the left to navigate.",36)
     sec(f,"Controls")
-    inf(f,"[ M ] Open/Close   •   [ Q ] Aimbot   •   [ Z ] Teleport\n[ — ] Minimize   •   [ □ ] Maximize   •   [ X ] Hide\nBottom-right L handle = Resize",52)
-    sec(f,"Live Statistics")
+    inf(f,"[M] Open/Close   [Q] Aimbot   [Z] Teleport\n[F] Fly (toggle then press F)   [-] Minimize   [X] Close\nBottom-right = Resize",52)
+    sec(f,"Live Stats")
     local g1=grid(f); local _,vFPS=card(g1,"FPS","..."); local _,vPing=card(g1,"Ping","...")
-    local g2=grid(f); local _,vPlrs=card(g2,"Players",tostring(#PLS:GetPlayers())); local _,vUID=card(g2,"UserID",tostring(lp.UserId))
-    local g3=grid(f); local _,vPos=card(g3,"Position","..."); local _,vGID=card(g3,"PlaceId",tostring(game.PlaceId))
-    local fc=RS.RenderStepped:Connect(function(dt) vFPS.Text=tostring(math.floor(1/dt)).." fps" end)
-    table.insert(conns,fc)
+    local g2=grid(f); local _,vPlrs=card(g2,"Players",tostring(#PLS:GetPlayers())); card(g2,"UserID",tostring(lp.UserId))
+    local g3=grid(f); local _,vPos=card(g3,"Position","..."); card(g3,"PlaceId",tostring(game.PlaceId))
+    table.insert(conns,RS.RenderStepped:Connect(function(dt) vFPS.Text=tostring(math.floor(1/dt)).." fps" end))
     task.spawn(function()
         while SGui and SGui.Parent do
             task.wait(2); vPlrs.Text=tostring(#PLS:GetPlayers())
-            local hrp=getHRP()
-            if hrp then local p=hrp.Position; vPos.Text=string.format("%.0f, %.0f, %.0f",p.X,p.Y,p.Z) end
+            local hrp=getHRP(); if hrp then local p=hrp.Position; vPos.Text=string.format("%.0f, %.0f, %.0f",p.X,p.Y,p.Z) end
             local ok,pg=pcall(function() return math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()) end)
             if ok then vPing.Text=tostring(pg).." ms" end
         end
     end)
     sec(f,"Quick Actions")
-    btn(f,"📋  Copy UserID",   Color3.fromRGB(28,6,6),function() pcall(function() setclipboard(tostring(lp.UserId)) end); notifyOK("UserID copied!") end)
-    btn(f,"📍  Show position", Color3.fromRGB(28,6,6),function()
-        local hrp=getHRP(); if hrp then notifyInfo(string.format("X: %.1f   Y: %.1f   Z: %.1f",hrp.Position.X,hrp.Position.Y,hrp.Position.Z)) end
-    end)
-    btn(f,"📊  Server info",   Color3.fromRGB(28,6,6),function()
-        notifyInfo("Players: "..#PLS:GetPlayers().."  |  PlaceId: "..game.PlaceId)
-    end)
-    btn(f,"🌐  Copy game link",Color3.fromRGB(28,6,6),function() pcall(function() setclipboard("https://www.roblox.com/games/"..tostring(game.PlaceId)) end); notifyOK("Game link copied!") end)
-    btn(f,"⏱️  Session time",  Color3.fromRGB(28,6,6),function() notifyInfo("Session uptime: "..tostring(math.floor(tick())).."s") end)
+    btn(f,"Copy UserID",   Color3.fromRGB(28,6,6),function() pcall(function() setclipboard(tostring(lp.UserId)) end); notifyOK("UserID copied!") end)
+    btn(f,"Copy Position", Color3.fromRGB(28,6,6),function() local hrp=getHRP(); if hrp then local p=hrp.Position; pcall(function() setclipboard(string.format("%.1f, %.1f, %.1f",p.X,p.Y,p.Z)) end); notifyOK("Position copied!") end end)
+    btn(f,"Copy Game Link",Color3.fromRGB(28,6,6),function() pcall(function() setclipboard("https://www.roblox.com/games/"..tostring(game.PlaceId)) end); notifyOK("Link copied!") end)
+    btn(f,"Server Info",   Color3.fromRGB(28,6,6),function() notifyInfo("Players: "..#PLS:GetPlayers().."  |  PlaceId: "..game.PlaceId) end)
 end
 
 -- ================================================================
 --  MOVEMENT TAB
--- heights: chk=27, gap=2
--- Left:  5 chk = 135 + 4*2 = 143  →  panel = 143+32+7 = 182
--- Right: 9 lck = 243 + 8*2 = 259  →  panel = 259+32+7 = 298
 -- ================================================================
 do
     local f=mkTab("Movement")
-    sec(f,"Configuration")
+    sec(f,"Config")
     sld(f,"Walk Speed",16,200,50,function(v) SL.walkSpeed=v; if T.speed then local h=getHum(); if h then h.WalkSpeed=v end end end)
     sld(f,"Jump Power",50,300,100,function(v) SL.jumpPower=v; if T.infJump then local h=getHum(); if h then h.JumpPower=v end end end)
+    sld(f,"Fly Speed",10,200,60,function(v) SL.flySpeed=v end)
     sec(f,"Toggles  &  Premium")
-    local _,li,ri=panelRow(f,"Active","Premium",182,298)
-    chk(li,"Speed Hack",     "speed",
-        function() local h=getHum(); if h then h.WalkSpeed=SL.walkSpeed end end,
-        function() local h=getHum(); if h then h.WalkSpeed=16 end end)
-    chk(li,"Infinite Jump",  "infJump",
-        function() local h=getHum(); if h then h.JumpPower=SL.jumpPower end end,
-        function() local h=getHum(); if h then h.JumpPower=50 end end)
-    chk(li,"Auto Bhop",      "autoBhop",function() end,function() end)
-    chk(li,"No Clip",        "noclip",
-        function() end,
-        function() local c=getChar(); if c then for _,p in pairs(c:GetDescendants()) do if p:IsA("BasePart") then pcall(function() p.CanCollide=true end) end end end end)
-    chk(li,"Teleport [ Z ]", "teleport",function() end,function() end,"Z")
-    lckChk(ri,"Fly")
-    lckChk(ri,"SpinBot")
-    lckChk(ri,"Bunny Hop  (Advanced)")
-    lckChk(ri,"Long Jump")
-    lckChk(ri,"Launch into Air")
-    lckChk(ri,"Gravity Control")
-    lckChk(ri,"Speed Multiplier  x10")
-    lckChk(ri,"Silent Walk")
-    lckChk(ri,"Dash  (double tap)")
+    local _,li,ri=panelRow(f,"Active","Premium",212,270)
+    chk(li,"Speed Hack","speed",function() local h=getHum(); if h then h.WalkSpeed=SL.walkSpeed end; notifyOK("Speed ON") end,function() local h=getHum(); if h then h.WalkSpeed=16 end; notifyWarn("Speed OFF") end)
+    chk(li,"Infinite Jump","infJump",function() local h=getHum(); if h then h.JumpPower=SL.jumpPower end; notifyOK("Infinite Jump ON") end,function() local h=getHum(); if h then h.JumpPower=50 end end)
+    chk(li,"Auto Bhop","autoBhop",function() notifyOK("Auto Bhop ON") end,function() end)
+    chk(li,"No Clip","noclip",function() notifyOK("No Clip ON") end,function() local c=getChar(); if c then for _,p in pairs(c:GetDescendants()) do if p:IsA("BasePart") then pcall(function() p.CanCollide=true end) end end end end)
+    chk(li,"Teleport  [Z]","teleport",function() end,function() end,"Z")
+    -- Fly toggle: activa el modo, el vuelo arranca con F
+    chk(li,"Fly  [F]","fly",function() end,function()
+        if flyActive then flyActive=false end
+        local hrp=getHRP(); if hrp then local bv=hrp:FindFirstChild("__flyBV"); if bv then bv:Destroy() end; local bg=hrp:FindFirstChild("__flyBG"); if bg then bg:Destroy() end end
+        local hh=getHum(); if hh then hh.PlatformStand=false end
+        notifyWarn("Fly OFF")
+    end,"F")
+    lckChk(ri,"SpinBot"); lckChk(ri,"Long Jump"); lckChk(ri,"Launch into Air")
+    lckChk(ri,"Gravity Control"); lckChk(ri,"Speed x10"); lckChk(ri,"Silent Walk"); lckChk(ri,"Dash"); lckChk(ri,"Bunny Hop Advanced"); lckChk(ri,"Wall Jump")
 end
 
 -- ================================================================
 --  COMBAT TAB
--- Left:  chk(27)+panSec(16)+btnS*2(56) = 99 + 3*2 = 105  → 105+32+7 = 144
--- Right: 7 lck = 189 + 6*2 = 201  → 201+32+7 = 240
 -- ================================================================
 do
     local f=mkTab("Combat")
-    sec(f,"Configuration")
-    inf(f,"Hold [ Q ] to lock camera onto nearest player.",24)
+    sec(f,"Config")
+    inf(f,"Hold [Q] to lock camera onto nearest player.",24)
     sld(f,"Max Distance (px)",100,1200,600,function(v) SL.aimbotDist=v end)
     sec(f,"Toggles  &  Actions")
     local _,li,ri=panelRow(f,"Combat","Premium",144,240)
-    chk(li,"Aimbot [ Q ]","aimbot",function() end,function() end,"Q")
+    chk(li,"Aimbot  [Q]","aimbot",function() notifyOK("Aimbot ON") end,function() end,"Q")
     panSec(li,"Actions")
-    btnS(li,"💥  Ragdoll Self",Color3.fromRGB(28,6,6),function()
+    btnS(li,"Ragdoll Self",Color3.fromRGB(28,6,6),function()
         local char=getChar(); if not char then return end
         for _,j in pairs(char:GetDescendants()) do
             if j:IsA("Motor6D") then
@@ -747,273 +859,148 @@ do
                 a1.CFrame=j.C0; a2.CFrame=j.C1
                 local bc=Instance.new("BallSocketConstraint",j.Part0); bc.Attachment0=a1; bc.Attachment1=a2; j.Enabled=false
             end
-        end
-        notifyWarn("Ragdoll activated!")
+        end; notifyWarn("Ragdoll activated!")
     end)
-    btnS(li,"🔄  Reset Character",Color3.fromRGB(28,6,6),function() local h=getHum(); if h then h.Health=0 end end)
-    lckChk(ri,"Hitbox Expand")
-    lckChk(ri,"God Mode  (Infinite HP)")
-    lckChk(ri,"Auto Heal")
-    lckChk(ri,"Anti-Ragdoll")
-    lckChk(ri,"Auto Respawn")
-    lckChk(ri,"Silent Aim")
-    lckChk(ri,"Kill Aura")
+    btnS(li,"Reset Character",Color3.fromRGB(28,6,6),function() local h=getHum(); if h then h.Health=0 end end)
+    lckChk(ri,"Hitbox Expand"); lckChk(ri,"God Mode"); lckChk(ri,"Auto Heal"); lckChk(ri,"Anti-Ragdoll")
+    lckChk(ri,"Auto Respawn"); lckChk(ri,"Silent Aim"); lckChk(ri,"Kill Aura")
 end
 
 -- ================================================================
 --  VISUALS TAB
--- Left:  chk*4(108)+panSec(16)+btnS(28) = 152 + 5*2 = 162  → 162+32+7 = 201
--- Right: 9 lck = 243 + 8*2 = 259  → 259+32+7 = 298
 -- ================================================================
 do
     local f=mkTab("Visuals")
-    sec(f,"Configuration")
-    sld(f,"Field of View",50,120,70,function(v) cam.FieldOfView=v end)
+    sec(f,"Config"); sld(f,"Field of View",50,120,70,function(v) cam.FieldOfView=v end)
     sec(f,"Toggles  &  Premium")
-    local _,li,ri=panelRow(f,"Active","Premium",201,298)
-    chk(li,"ESP Boxes","espBox",
-        function() end,
-        function() for _,o in pairs(espBoxObj) do
-            pcall(function() if o.box then o.box.Visible=false end end)
-            pcall(function() if o.nameL then o.nameL.Visible=false end end)
-        end end)
-    chk(li,"Night Vision","nightVis",
-        function() LGT.Ambient=Color3.new(1,1,1); LGT.Brightness=3 end,
-        function() LGT.Ambient=origAmbient; LGT.Brightness=origBright end)
-    chk(li,"Remove Fog","removeFog",
-        function() LGT.FogEnd=100000; LGT.FogStart=99999 end,
-        function() LGT.FogEnd=origFogEnd; LGT.FogStart=origFogStart end)
-    chk(li,"Crosshair","crosshair",
-        function()
-            local vp=cam.ViewportSize; local cx,cy=vp.X/2,vp.Y/2
-            local function mkLine(x1,y1,x2,y2)
-                local ok,l=pcall(function() return Drawing.new("Line") end)
-                if ok then l.From=Vector2.new(x1,y1); l.To=Vector2.new(x2,y2); l.Color=Color3.fromRGB(220,50,50); l.Thickness=1.5; l.Visible=true end
-                return ok and l or nil
-            end
-            chLines={mkLine(cx-10,cy,cx-3,cy),mkLine(cx+3,cy,cx+10,cy),mkLine(cx,cy-10,cx,cy-3),mkLine(cx,cy+3,cx,cy+10)}
-        end,
-        function() for _,l in pairs(chLines) do pcall(function() l:Remove() end) end; chLines={} end)
-    panSec(li,"Camera")
-    btnS(li,"📷  Reset FOV (70°)",Color3.fromRGB(28,6,6),function() cam.FieldOfView=70; notifyOK("FOV reset to 70°") end)
-    lckChk(ri,"ESP  —  Health Bar")
-    lckChk(ri,"ESP  —  Tracelines")
-    lckChk(ri,"ESP  —  Distance Labels")
-    lckChk(ri,"ESP  —  Skeleton")
-    lckChk(ri,"Chams  (Player Highlight)")
-    lckChk(ri,"Fullbright")
-    lckChk(ri,"Third Person")
-    lckChk(ri,"Rainbow Mode")
-    lckChk(ri,"Scope / Sniper View")
+    local _,li,ri=panelRow(f,"Active","Premium",201,270)
+    chk(li,"ESP Boxes","espBox",function() notifyOK("ESP ON") end,function()
+        for _,o in pairs(espBoxObj) do pcall(function() if o.box then o.box.Visible=false end end); pcall(function() if o.nameL then o.nameL.Visible=false end end) end
+    end)
+    chk(li,"Night Vision","nightVis",function() LGT.Ambient=Color3.new(1,1,1); LGT.Brightness=3; notifyOK("Night Vision ON") end,function() LGT.Ambient=origAmbient; LGT.Brightness=origBright end)
+    chk(li,"Remove Fog","removeFog",function() LGT.FogEnd=100000; LGT.FogStart=99999 end,function() LGT.FogEnd=origFogEnd; LGT.FogStart=origFogStart end)
+    chk(li,"Crosshair","crosshair",function()
+        local vp=cam.ViewportSize; local cx,cy=vp.X/2,vp.Y/2
+        local function mkLine(x1,y1,x2,y2) local ok,l=pcall(function() return Drawing.new("Line") end); if ok then l.From=Vector2.new(x1,y1); l.To=Vector2.new(x2,y2); l.Color=Color3.fromRGB(220,50,50); l.Thickness=1.5; l.Visible=true end; return ok and l or nil end
+        chLines={mkLine(cx-10,cy,cx-3,cy),mkLine(cx+3,cy,cx+10,cy),mkLine(cx,cy-10,cx,cy-3),mkLine(cx,cy+3,cx,cy+10)}
+    end,function() for _,l in pairs(chLines) do pcall(function() l:Remove() end) end; chLines={} end)
+    panSec(li,"Camera"); btnS(li,"Reset FOV (70)",Color3.fromRGB(28,6,6),function() cam.FieldOfView=70; notifyOK("FOV reset") end)
+    lckChk(ri,"ESP Health Bar"); lckChk(ri,"ESP Tracelines"); lckChk(ri,"ESP Distance"); lckChk(ri,"ESP Skeleton")
+    lckChk(ri,"Chams (Highlight)"); lckChk(ri,"Fullbright"); lckChk(ri,"Third Person"); lckChk(ri,"Rainbow Mode"); lckChk(ri,"Sniper FOV")
 end
 
 -- ================================================================
 --  PLAYER TAB
--- Left:  chk(27)+panSec(16)+btnS*6(168) = 211 + 7*2 = 225  → 225+32+7 = 264
--- Right: 7 lck = 189 + 6*2 = 201  → 201+32+7 = 240
 -- ================================================================
 do
-    local f=mkTab("Player")
-    sec(f,"Actions  &  Premium")
-    local _,li,ri=panelRow(f,"Actions","Premium",264,240)
-    chk(li,"Anti-AFK","antiAfk",
-        function()
-            task.spawn(function()
-                while T.antiAfk do
-                    task.wait(55); local hrp=getHRP()
-                    if hrp then
-                        local orig=hrp.CFrame
-                        hrp.CFrame=orig*CFrame.new(0,0.05,0); task.wait(0.1)
-                        if T.antiAfk then hrp.CFrame=orig end
-                    end
-                    pcall(function() game:GetService("VirtualUser"):CaptureController() end)
-                end
-            end)
-        end,
-        function() end)
+    local f=mkTab("Player"); sec(f,"Actions  &  Premium")
+    local _,li,ri=panelRow(f,"Actions","Premium",264,212)
+    chk(li,"Anti-AFK","antiAfk",function()
+        task.spawn(function()
+            while T.antiAfk do task.wait(55); local hrp=getHRP(); if hrp then local orig=hrp.CFrame; hrp.CFrame=orig*CFrame.new(0,0.05,0); task.wait(0.1); if T.antiAfk then hrp.CFrame=orig end end; pcall(function() game:GetService("VirtualUser"):CaptureController() end) end
+        end); notifyOK("Anti-AFK ON")
+    end,function() end)
     panSec(li,"Quick Actions")
-    btnS(li,"📋  Copy UserID",    Color3.fromRGB(28,6,6),function() pcall(function() setclipboard(tostring(lp.UserId)) end); notifyOK("UserID copied!") end)
-    btnS(li,"📡  Copy Username",  Color3.fromRGB(28,6,6),function() pcall(function() setclipboard(lp.Name) end); notifyOK("Username copied!") end)
-    btnS(li,"🌐  View Position",  Color3.fromRGB(28,6,6),function()
-        local hrp=getHRP(); if hrp then local p=hrp.Position; notifyInfo(string.format("%.1f, %.1f, %.1f",p.X,p.Y,p.Z)) end
-    end)
-    btnS(li,"🎭  Reload Character",Color3.fromRGB(28,6,6),function() pcall(function() lp:LoadCharacter() end) end)
-    btnS(li,"🔄  Reset Character", Color3.fromRGB(28,6,6),function() local h=getHum(); if h then h.Health=0 end end)
-    btnS(li,"🔄  Rejoin Server",   Color3.fromRGB(28,6,6),function() pcall(function() game:GetService("TeleportService"):Teleport(game.PlaceId,lp) end) end)
-    lckChk(ri,"Invisible  (Local)")
-    lckChk(ri,"Transparency Slider")
-    lckChk(ri,"Follow Player")
-    lckChk(ri,"Save / Restore Position")
-    lckChk(ri,"Fake Display Name")
-    lckChk(ri,"Change Walk Anim")
-    lckChk(ri,"Infinite Stamina")
+    btnS(li,"Copy UserID",     Color3.fromRGB(28,6,6),function() pcall(function() setclipboard(tostring(lp.UserId)) end); notifyOK("UserID copied!") end)
+    btnS(li,"Copy Username",   Color3.fromRGB(28,6,6),function() pcall(function() setclipboard(lp.Name) end); notifyOK("Username copied!") end)
+    btnS(li,"Copy Position",   Color3.fromRGB(28,6,6),function() local hrp=getHRP(); if hrp then local p=hrp.Position; pcall(function() setclipboard(string.format("%.1f,%.1f,%.1f",p.X,p.Y,p.Z)) end); notifyOK("Position copied!") end end)
+    btnS(li,"Reload Character",Color3.fromRGB(28,6,6),function() pcall(function() lp:LoadCharacter() end) end)
+    btnS(li,"Reset Character", Color3.fromRGB(28,6,6),function() local h=getHum(); if h then h.Health=0 end end)
+    btnS(li,"Rejoin Server",   Color3.fromRGB(28,6,6),function() pcall(function() game:GetService("TeleportService"):Teleport(game.PlaceId,lp) end) end)
+    lckChk(ri,"Invisible (Local)"); lckChk(ri,"Transparency Slider"); lckChk(ri,"Follow Player")
+    lckChk(ri,"Save / Restore Pos"); lckChk(ri,"Fake Display Name"); lckChk(ri,"Infinite Stamina"); lckChk(ri,"Change Walk Anim")
 end
 
 -- ================================================================
 --  WORLD TAB
--- Left:  panSec(16)+btnS*5(140)+panSec(16)+btnS*3(84) = 256 + 8*2 = 272  → 272+32+7 = 311
--- Right: 10 lck = 270 + 9*2 = 288  → 288+32+7 = 327
 -- ================================================================
 do
-    local f=mkTab("World")
-    sec(f,"Environment  &  Premium")
-    local _,li,ri=panelRow(f,"Time  &  Gravity","Premium",311,327)
+    local f=mkTab("World"); sec(f,"Environment  &  Premium")
+    local _,li,ri=panelRow(f,"Time  &  Gravity","Premium",311,299)
     panSec(li,"Time of Day")
-    btnS(li,"☀️  Noon  (12:00)",   Color3.fromRGB(28,6,6),function() LGT.ClockTime=12 end)
-    btnS(li,"🌅  Dawn  (06:00)",   Color3.fromRGB(28,6,6),function() LGT.ClockTime=6  end)
-    btnS(li,"🌆  Sunset  (18:00)", Color3.fromRGB(28,6,6),function() LGT.ClockTime=18 end)
-    btnS(li,"🌙  Midnight (00:00)",Color3.fromRGB(28,6,6),function() LGT.ClockTime=0  end)
-    btnS(li,"🔄  Restore Lighting",Color3.fromRGB(28,6,6),function()
-        LGT.ClockTime=origClockTime; LGT.Ambient=origAmbient; LGT.Brightness=origBright; LGT.GlobalShadows=origShadows
-    end)
+    btnS(li,"Noon  (12:00)",    Color3.fromRGB(28,6,6),function() LGT.ClockTime=12 end)
+    btnS(li,"Dawn  (06:00)",    Color3.fromRGB(28,6,6),function() LGT.ClockTime=6  end)
+    btnS(li,"Sunset  (18:00)",  Color3.fromRGB(28,6,6),function() LGT.ClockTime=18 end)
+    btnS(li,"Midnight (00:00)", Color3.fromRGB(28,6,6),function() LGT.ClockTime=0  end)
+    btnS(li,"Restore Lighting", Color3.fromRGB(28,6,6),function() LGT.ClockTime=origClockTime; LGT.Ambient=origAmbient; LGT.Brightness=origBright; LGT.GlobalShadows=origShadows end)
     panSec(li,"Gravity")
-    btnS(li,"🌍  Normal  (196)",  Color3.fromRGB(28,6,6),function() workspace.Gravity=196 end)
-    btnS(li,"🪐  Lunar  (30)",    Color3.fromRGB(28,6,6),function() workspace.Gravity=30  end)
-    btnS(li,"🔄  Restore Gravity",Color3.fromRGB(28,6,6),function() workspace.Gravity=origGravity end)
-    lckChk(ri,"Time Loop  (auto cycle)")
-    lckChk(ri,"Clock Time Slider")
-    lckChk(ri,"Fog Control")
-    lckChk(ri,"Darkness / Max Brightness")
-    lckChk(ri,"No Gravity  (0)")
-    lckChk(ri,"Neon Mode")
-    lckChk(ri,"Transparent Map")
-    lckChk(ri,"Paint Map Golden")
-    lckChk(ri,"Delete All Decals")
-    lckChk(ri,"Full World Reset")
+    btnS(li,"Normal  (196)",    Color3.fromRGB(28,6,6),function() workspace.Gravity=196 end)
+    btnS(li,"Lunar  (30)",      Color3.fromRGB(28,6,6),function() workspace.Gravity=30  end)
+    btnS(li,"Restore Gravity",  Color3.fromRGB(28,6,6),function() workspace.Gravity=origGravity end)
+    lckChk(ri,"Time Loop Auto"); lckChk(ri,"Clock Slider"); lckChk(ri,"Fog Control"); lckChk(ri,"Darkness / Max Bright")
+    lckChk(ri,"Zero Gravity"); lckChk(ri,"Neon Mode"); lckChk(ri,"Transparent Map"); lckChk(ri,"Paint Map"); lckChk(ri,"Delete Decals"); lckChk(ri,"Full World Reset")
 end
 
 -- ================================================================
 --  TROLL TAB
--- Left:  chk(27)+panSec(16)+btnS*6(168) = 211 + 7*2 = 225  → 225+32+7 = 264
--- Right: 8 lck = 216 + 7*2 = 230  → 230+32+7 = 269
 -- ================================================================
 do
-    local f=mkTab("Troll")
-    sec(f,"Chat Trolls  &  Spam")
-    inf(f,"Visible to ALL players. Works on classic + TextChatService games.",30)
-    local _,li,ri=panelRow(f,"Basic  (Free)","Premium",264,269)
-    chk(li,"Chat Spam Loop","chatSpam",
-        function()
-            task.spawn(function()
-                while T.chatSpam do sendChat(chatSpamMsg); task.wait(chatSpamInt) end
-            end)
-        end,
-        function() end)
+    local f=mkTab("Troll"); sec(f,"Chat Trolls  &  Spam")
+    inf(f,"Visible to ALL players. Works on Classic + TextChatService.",30)
+    local _,li,ri=panelRow(f,"Basic  (Free)","Premium",264,241)
+    chk(li,"Chat Spam Loop","chatSpam",function()
+        task.spawn(function() while T.chatSpam do sendChat(chatSpamMsg); task.wait(chatSpamInt) end end)
+    end,function() end)
     panSec(li,"One-Shot Messages")
-    btnS(li,"🩸  WDG Announcement",  Color3.fromRGB(40,8,8), function()
-        sendChat("🩸 WDG‐World Demonic Glitch HUB  •  Script Loaded V.1  🩸")
-        notifyOK("WDG message sent!")
-    end)
-    btnS(li,"🔴  Fake Shutdown",      Color3.fromRGB(55,8,8), function()
-        sendChat("[ ROBLOX ]: This server will shutdown in 60 seconds.")
-        notifyOK("Sent!")
-    end)
-    btnS(li,"👮  Fake Admin",          Color3.fromRGB(55,8,8), function()
-        sendChat("[ ADMIN ]: Cheaters detected. Initiating ban procedure.")
-        notifyOK("Sent!")
-    end)
-    btnS(li,"☠️  Fake Random Ban",     Color3.fromRGB(55,8,8), function()
-        local ps=PLS:GetPlayers(); local t=ps[math.random(1,#ps)]
-        sendChat("[ MODERATION ]: "..t.Name.." has been permanently banned.")
-        notifyOK("Sent for: "..t.Name)
-    end)
-    btnS(li,"💀  Fake DataStore Error",Color3.fromRGB(28,6,6), function()
-        sendChat("ERROR: DataStore failed. All player progress may be lost.")
-        notifyOK("Sent!")
-    end)
-    btnS(li,"😂  Spam WDG x5",         Color3.fromRGB(28,6,6), function()
-        task.spawn(function()
-            for i=1,5 do sendChat("🩸 WDG HUB  •  "..lp.Name); task.wait(1.2) end
-        end)
-        notifyOK("Spam x5 fired!")
-    end)
-    lckChk(ri,"Custom Spam Message")
-    lckChk(ri,"Impersonate Player")
-    lckChk(ri,"Fake Vote Kick")
-    lckChk(ri,"Fake Win Announcement")
-    lckChk(ri,"Mass @ Everyone")
-    lckChk(ri,"Sound Bomb  (loud noise)")
-    lckChk(ri,"Particle Storm")
-    lckChk(ri,"Lag All Players")
-    sec(f,"Spam Settings")
-    sld(f,"Chat Spam Interval  (s)",2,30,5,function(v) chatSpamInt=v end)
+    btnS(li,"WDG Announcement",  Color3.fromRGB(40,8,8), function() sendChat("WDG Hub  --  Basic Mode  --  Loaded"); notifyOK("Sent!") end)
+    btnS(li,"Fake Shutdown",     Color3.fromRGB(55,8,8), function() sendChat("[ ROBLOX ]: This server will shutdown in 60 seconds."); notifyOK("Sent!") end)
+    btnS(li,"Fake Admin",        Color3.fromRGB(55,8,8), function() sendChat("[ ADMIN ]: Cheaters detected. Initiating ban procedure."); notifyOK("Sent!") end)
+    btnS(li,"Fake Random Ban",   Color3.fromRGB(55,8,8), function() local ps=PLS:GetPlayers(); local t=ps[math.random(1,#ps)]; sendChat("[ MODERATION ]: "..t.Name.." has been permanently banned."); notifyOK("Sent!") end)
+    btnS(li,"Fake DataStore Err",Color3.fromRGB(28,6,6), function() sendChat("ERROR: DataStore failed. All progress may be lost."); notifyOK("Sent!") end)
+    btnS(li,"Spam WDG x5",       Color3.fromRGB(28,6,6), function() task.spawn(function() for i=1,5 do sendChat("WDG HUB  --  "..lp.Name); task.wait(1.2) end end); notifyOK("Spam fired!") end)
+    lckChk(ri,"Custom Spam Msg"); lckChk(ri,"Impersonate Player"); lckChk(ri,"Fake Vote Kick")
+    lckChk(ri,"Fake Win Announce"); lckChk(ri,"Mass @ Everyone"); lckChk(ri,"Sound Bomb"); lckChk(ri,"Particle Storm"); lckChk(ri,"Lag All Players")
+    sec(f,"Spam Settings"); sld(f,"Chat Spam Interval (s)",2,30,5,function(v) chatSpamInt=v end)
 end
 
 -- ================================================================
 --  EXTRAS TAB
--- Left:  panSec(16)+btnS*2(56)+panSec(16)+btnS*2(56)+panSec(16)+btnS(28) = 188 + 7*2 = 202  → 202+32+7 = 241
--- Right: 6 lck = 162 + 5*2 = 172  → 172+32+7 = 211
 -- ================================================================
 do
-    local f=mkTab("Extras")
-    sec(f,"Tools  &  Premium")
-    local _,li,ri=panelRow(f,"GUI  &  Audio","Premium",241,211)
+    local f=mkTab("Extras"); sec(f,"Tools  &  Premium")
+    local _,li,ri=panelRow(f,"GUI  &  Audio","Premium",241,183)
     panSec(li,"Roblox GUI")
-    btnS(li,"🔇  Hide All GUI", Color3.fromRGB(28,6,6),function()
-        pcall(function() SG:SetCoreGuiEnabled(Enum.CoreGuiType.All,false) end); notifyWarn("GUI hidden")
-    end)
-    btnS(li,"🔈  Show All GUI", Color3.fromRGB(28,6,6),function()
-        pcall(function() SG:SetCoreGuiEnabled(Enum.CoreGuiType.All,true) end); notifyOK("GUI restored")
-    end)
+    btnS(li,"Hide All GUI",  Color3.fromRGB(28,6,6),function() pcall(function() SG:SetCoreGuiEnabled(Enum.CoreGuiType.All,false) end); notifyWarn("GUI hidden") end)
+    btnS(li,"Show All GUI",  Color3.fromRGB(28,6,6),function() pcall(function() SG:SetCoreGuiEnabled(Enum.CoreGuiType.All,true)  end); notifyOK("GUI restored") end)
     panSec(li,"Audio")
-    btnS(li,"🔇  Mute Game",    Color3.fromRGB(28,6,6),function()
-        for _,s in pairs(workspace:GetDescendants()) do if s:IsA("Sound") then pcall(function() s.Volume=0 end) end end
-        notifyWarn("Game muted")
-    end)
-    btnS(li,"🔊  Restore Audio",Color3.fromRGB(28,6,6),function()
-        for _,s in pairs(workspace:GetDescendants()) do if s:IsA("Sound") then pcall(function() s.Volume=0.5 end) end end
-        notifyOK("Audio restored")
-    end)
+    btnS(li,"Mute Game",     Color3.fromRGB(28,6,6),function() for _,s in pairs(workspace:GetDescendants()) do if s:IsA("Sound") then pcall(function() s.Volume=0 end) end end; notifyWarn("Game muted") end)
+    btnS(li,"Restore Audio", Color3.fromRGB(28,6,6),function() for _,s in pairs(workspace:GetDescendants()) do if s:IsA("Sound") then pcall(function() s.Volume=0.5 end) end end; notifyOK("Audio restored") end)
     panSec(li,"Utils")
-    btnS(li,"📡  Player List",  Color3.fromRGB(28,6,6),function()
-        local names={}; for _,p in pairs(PLS:GetPlayers()) do table.insert(names,p.Name) end
-        notifyInfo(table.concat(names,"  •  "))
-    end)
-    lckChk(ri,"Fake Lag")
-    lckChk(ri,"Only Backpack Visible")
-    lckChk(ri,"Only Chat Visible")
-    lckChk(ri,"Tornado SpinBoost")
-    lckChk(ri,"Shake Screen")
-    lckChk(ri,"Screenshot  (hide HUB)")
+    btnS(li,"Player List",   Color3.fromRGB(28,6,6),function() local names={}; for _,p in pairs(PLS:GetPlayers()) do table.insert(names,p.Name) end; notifyInfo(table.concat(names,"  |  ")) end)
+    lckChk(ri,"Fake Lag"); lckChk(ri,"Only Backpack"); lckChk(ri,"Only Chat"); lckChk(ri,"Shake Screen"); lckChk(ri,"Screenshot Hide HUB"); lckChk(ri,"Rejoin Any Server")
 end
 
 -- ================================================================
 --  CONFIG TAB
--- Locked panels: 3 lck = 81 + 2*2 = 85  → 85+32+7 = 124
 -- ================================================================
 do
-    local f=mkTab("Config")
-    sec(f,"General")
-    inf(f,"Basic Mode  —  upgrade to WDG Premium to unlock all advanced features.",44)
-    btn(f,"⚠️  Turn OFF all toggles",Color3.fromRGB(55,8,8),function()
+    local f=mkTab("Config"); sec(f,"General")
+    inf(f,"WDG Hub  --  Basic Mode  --  v2\nUpgrade to Premium to unlock all advanced features.",44)
+    btn(f,"Turn OFF all toggles",Color3.fromRGB(55,8,8),function()
         for _,r in pairs(togRefs) do if r.getState and r.getState() then r.setState(false) end end
         local h=getHum(); if h then h.WalkSpeed=16; h.JumpPower=50 end
         cam.FieldOfView=70; workspace.Gravity=origGravity
-        notifyWarn("All toggles turned off")
+        if flyActive then flyActive=false end; notifyWarn("All toggles OFF")
     end)
-    btn(f,"📷  Reset Camera",  Color3.fromRGB(28,6,6),function() cam.FieldOfView=70; notifyOK("Camera reset") end)
-    btn(f,"🌍  Reset Gravity", Color3.fromRGB(28,6,6),function() workspace.Gravity=origGravity; notifyOK("Gravity restored") end)
-    btn(f,"💡  Reset Lighting",Color3.fromRGB(28,6,6),function()
-        LGT.Ambient=origAmbient; LGT.Brightness=origBright; LGT.GlobalShadows=origShadows; notifyOK("Lighting restored")
+    btn(f,"Reset Camera",   Color3.fromRGB(28,6,6),function() cam.FieldOfView=70; notifyOK("Camera reset") end)
+    btn(f,"Reset Gravity",  Color3.fromRGB(28,6,6),function() workspace.Gravity=origGravity; notifyOK("Gravity restored") end)
+    btn(f,"Reset Lighting", Color3.fromRGB(28,6,6),function() LGT.Ambient=origAmbient; LGT.Brightness=origBright; LGT.GlobalShadows=origShadows; notifyOK("Lighting restored") end)
+    btn(f,"Clear Drawing",  Color3.fromRGB(28,6,6),function()
+        pcall(function() Drawing:ClearAllObjects() end)
+        for _,l in pairs(chLines) do pcall(function() l:Remove() end) end; chLines={}; notifyOK("Drawing cleared")
     end)
     sec(f,"Premium Features")
     local _,li,ri=panelRow(f,"Locked","Locked",124,124)
-    lckChk(li,"HUB Themes")
-    lckChk(li,"Chat Notifications")
-    lckChk(li,"Keybind Customization")
-    lckChk(ri,"Full HUB Disconnect")
-    lckChk(ri,"Auto-Save Config")
-    lckChk(ri,"Config Profiles")
+    lckChk(li,"HUB Themes"); lckChk(li,"Chat Notifications"); lckChk(li,"Keybind Customization")
+    lckChk(ri,"Full HUB Disconnect"); lckChk(ri,"Auto-Save Config"); lckChk(ri,"Config Profiles")
 end
 
 -- ================================================================
 --  MINIMIZE / MAXIMIZE / CLOSE
 -- ================================================================
 local minimized=false; local savedW,savedH=650,450; local maximized=false
-
 MinBtn.MouseButton1Click:Connect(function()
-    if maximized then return end
-    minimized=not minimized
+    if maximized then return end; minimized=not minimized
     if minimized then
         savedW=MF.AbsoluteSize.X; savedH=MF.AbsoluteSize.Y
         SB.Visible=false; CA.Visible=false; Glow.Visible=false; RH.Visible=false
@@ -1029,15 +1016,14 @@ MaxBtn.MouseButton1Click:Connect(function()
         savedW=MF.AbsoluteSize.X; savedH=MF.AbsoluteSize.Y
         local vp=cam.ViewportSize
         tween(MF,{Size=UDim2.new(0,vp.X,0,vp.Y),Position=UDim2.new(0,0,0,0)},0.2)
-        SB.Visible=true; CA.Visible=true; Glow.Visible=true; RH.Visible=true; MaxBtn.Text="❐"
+        SB.Visible=true; CA.Visible=true; Glow.Visible=true; RH.Visible=true; MaxBtn.Text="-"
     else
-        tween(MF,{Size=UDim2.new(0,savedW,0,savedH),Position=UDim2.new(0.5,-savedW/2,0.5,-savedH/2)},0.2)
-        MaxBtn.Text="□"
+        tween(MF,{Size=UDim2.new(0,savedW,0,savedH),Position=UDim2.new(0.5,-savedW/2,0.5,-savedH/2)},0.2); MaxBtn.Text="+"
     end
 end)
 CloseBtn.MouseButton1Click:Connect(function()
-    maximized=false; MaxBtn.Text="□"; MF.Visible=false; Glow.Visible=false
-    notify("HUB hidden  ·  Press [ M ] to reopen",C.red1,"WDG HUB","👁",true)
+    maximized=false; MaxBtn.Text="+"; MF.Visible=false; Glow.Visible=false
+    notify("HUB hidden  --  Press [M] to reopen",C.red1,"i")
 end)
 
 -- ================================================================
@@ -1062,15 +1048,9 @@ end)
 --  RESIZE
 -- ================================================================
 local resizing=false; local resizeStart=Vector2.new(); local startSize=UDim2.new()
-local MIN_W,MIN_H=460,340
-RH.InputBegan:Connect(function(input)
-    if input.UserInputType==Enum.UserInputType.MouseButton1 then
-        resizing=true; resizeStart=Vector2.new(input.Position.X,input.Position.Y); startSize=MF.Size
-    end
-end)
-RH.InputEnded:Connect(function(input)
-    if input.UserInputType==Enum.UserInputType.MouseButton1 then resizing=false; savedW=MF.AbsoluteSize.X; savedH=MF.AbsoluteSize.Y end
-end)
+local MIN_W,MIN_H=460,380
+RH.InputBegan:Connect(function(input) if input.UserInputType==Enum.UserInputType.MouseButton1 then resizing=true; resizeStart=Vector2.new(input.Position.X,input.Position.Y); startSize=MF.Size end end)
+RH.InputEnded:Connect(function(input) if input.UserInputType==Enum.UserInputType.MouseButton1 then resizing=false; savedW=MF.AbsoluteSize.X; savedH=MF.AbsoluteSize.Y end end)
 UIS.InputChanged:Connect(function(input)
     if resizing and input.UserInputType==Enum.UserInputType.MouseMovement then
         local d=Vector2.new(input.Position.X,input.Position.Y)-resizeStart
@@ -1079,88 +1059,84 @@ UIS.InputChanged:Connect(function(input)
 end)
 
 -- ================================================================
---  KEYBOARD INPUTS
+--  FLY  (F key toggles actual flight when toggle is ON)
 -- ================================================================
-local ic=UIS.InputBegan:Connect(function(inp,gp)
+local function startFly()
+    if flyActive then return end
+    local hrp=getHRP(); if not hrp then return end
+    flyActive=true
+    local h=getHum(); if h then h.PlatformStand=true end
+    local bv=Instance.new("BodyVelocity"); bv.Name="__flyBV"; bv.MaxForce=Vector3.new(1e5,1e5,1e5); bv.Velocity=Vector3.zero; bv.Parent=hrp
+    local bg=Instance.new("BodyGyro"); bg.Name="__flyBG"; bg.MaxTorque=Vector3.new(1e5,1e5,1e5); bg.P=1e4; bg.D=200; bg.CFrame=hrp.CFrame; bg.Parent=hrp
+    notifyOK("Fly ON  --  WASD + Space/Shift")
+    task.spawn(function()
+        while flyActive do
+            task.wait()
+            local hrp2=getHRP(); if not hrp2 then break end
+            local bv2=hrp2:FindFirstChild("__flyBV"); local bg2=hrp2:FindFirstChild("__flyBG"); if not bv2 then break end
+            local spd=SL.flySpeed; local vel=Vector3.zero; local camCF=cam.CFrame
+            if UIS:IsKeyDown(Enum.KeyCode.W) then vel=vel+camCF.LookVector*spd end
+            if UIS:IsKeyDown(Enum.KeyCode.S) then vel=vel-camCF.LookVector*spd end
+            if UIS:IsKeyDown(Enum.KeyCode.A) then vel=vel-camCF.RightVector*spd end
+            if UIS:IsKeyDown(Enum.KeyCode.D) then vel=vel+camCF.RightVector*spd end
+            if UIS:IsKeyDown(Enum.KeyCode.Space) then vel=vel+Vector3.new(0,spd,0) end
+            if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then vel=vel-Vector3.new(0,spd,0) end
+            bv2.Velocity=vel
+            if bg2 then bg2.CFrame=CFrame.new(hrp2.Position,hrp2.Position+Vector3.new(camCF.LookVector.X,0,camCF.LookVector.Z)) end
+        end
+        local hrpF=getHRP()
+        if hrpF then local bvF=hrpF:FindFirstChild("__flyBV"); if bvF then bvF:Destroy() end; local bgF=hrpF:FindFirstChild("__flyBG"); if bgF then bgF:Destroy() end end
+        local hh=getHum(); if hh then hh.PlatformStand=false end
+    end)
+end
+local function stopFly()
+    if not flyActive then return end
+    flyActive=false; notifyWarn("Fly OFF")
+end
+
+-- ================================================================
+--  KEYBOARD
+-- ================================================================
+table.insert(conns,UIS.InputBegan:Connect(function(inp,gp)
     if gp then return end
-    if inp.KeyCode==Enum.KeyCode.M and UIReady then
-        local v=not MF.Visible; MF.Visible=v; Glow.Visible=v
+    if inp.KeyCode==Enum.KeyCode.M and UIReady then local v=not MF.Visible; MF.Visible=v; Glow.Visible=v end
+    if inp.KeyCode==Enum.KeyCode.F then
+        if togRefs["fly"] then
+            if not togRefs["fly"].getState() then togRefs["fly"].setState(true); startFly()
+            else if flyActive then stopFly() else startFly() end end
+        end
     end
     if inp.KeyCode==Enum.KeyCode.Q and T.aimbot and not locking then
-        locking=true
-        local best,bestD=nil,math.huge; local ctr=cam.ViewportSize/2
-        for _,p in pairs(PLS:GetPlayers()) do
-            if p~=lp and p.Character then
-                local head=p.Character:FindFirstChild("Head")
-                if head then
-                    local pos2D,onScreen=cam:WorldToViewportPoint(head.Position)
-                    if onScreen and pos2D.Z>0 then
-                        local d=(Vector2.new(pos2D.X,pos2D.Y)-ctr).Magnitude
-                        if d<bestD and d<SL.aimbotDist then bestD=d; best=head end
-                    end
-                end
-            end
-        end
-        if best then
-            local st=tick(); local c2
-            c2=RS.RenderStepped:Connect(function()
-                if tick()-st>=lockTime or not T.aimbot or not best or not best.Parent then
-                    c2:Disconnect(); locking=false; return
-                end
-                cam.CFrame=CFrame.new(cam.CFrame.Position,best.Position)
-            end)
-        else
-            locking=false; notifyWarn("No target in range","AIMBOT")
-        end
+        locking=true; local best,bestD=nil,math.huge; local ctr=cam.ViewportSize/2
+        for _,p in pairs(PLS:GetPlayers()) do if p~=lp and p.Character then local head=p.Character:FindFirstChild("Head"); if head then local pos2D,onScreen=cam:WorldToViewportPoint(head.Position); if onScreen and pos2D.Z>0 then local d=(Vector2.new(pos2D.X,pos2D.Y)-ctr).Magnitude; if d<bestD and d<SL.aimbotDist then bestD=d; best=head end end end end end
+        if best then local st=tick(); local c2; c2=RS.RenderStepped:Connect(function() if tick()-st>=lockTime or not T.aimbot or not best or not best.Parent then c2:Disconnect(); locking=false; return end; cam.CFrame=CFrame.new(cam.CFrame.Position,best.Position) end)
+        else locking=false; notifyWarn("No target in range") end
     end
-    if inp.KeyCode==Enum.KeyCode.Z and T.teleport then
-        local hrp=getHRP()
-        if hrp then hrp.CFrame=CFrame.new(lp:GetMouse().Hit.Position+Vector3.new(0,3,0)) end
-    end
-end)
-table.insert(conns,ic)
+    if inp.KeyCode==Enum.KeyCode.Z and T.teleport then local hrp=getHRP(); if hrp then hrp.CFrame=CFrame.new(lp:GetMouse().Hit.Position+Vector3.new(0,3,0)) end end
+end))
 
 -- ================================================================
 --  RENDERSTEPPED
 -- ================================================================
-local rsConn=RS.RenderStepped:Connect(function()
+table.insert(conns,RS.RenderStepped:Connect(function()
     local char=getChar(); if not char then return end
     local hum=char:FindFirstChild("Humanoid")
     if T.speed   and hum then hum.WalkSpeed=SL.walkSpeed end
-    if T.infJump and hum then hum.JumpPower=SL.jumpPower  end
-    if T.infJump and UIS:IsKeyDown(Enum.KeyCode.Space) then
-        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-    end
-    if T.autoBhop and hum then
-        if hum.FloorMaterial~=Enum.Material.Air then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-    end
-    if T.noclip then
-        for _,p in pairs(char:GetDescendants()) do
-            if p:IsA("BasePart") then pcall(function() p.CanCollide=false end) end
-        end
-    end
+    if T.infJump and hum then hum.JumpPower=SL.jumpPower end
+    if T.infJump and UIS:IsKeyDown(Enum.KeyCode.Space) then if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end end
+    if T.autoBhop and hum then if hum.FloorMaterial~=Enum.Material.Air then hum:ChangeState(Enum.HumanoidStateType.Jumping) end end
+    if T.noclip then for _,p in pairs(char:GetDescendants()) do if p:IsA("BasePart") then pcall(function() p.CanCollide=false end) end end end
     -- ESP
     for _,p in pairs(PLS:GetPlayers()) do
         if p==lp then continue end
         if not T.espBox then
-            if espBoxObj[p] then
-                pcall(function()
-                    if espBoxObj[p].box   then espBoxObj[p].box.Visible=false   end
-                    if espBoxObj[p].nameL then espBoxObj[p].nameL.Visible=false end
-                end); espBoxObj[p]=nil
-            end; continue
+            if espBoxObj[p] then pcall(function() if espBoxObj[p].box then espBoxObj[p].box.Visible=false end end); pcall(function() if espBoxObj[p].nameL then espBoxObj[p].nameL.Visible=false end end); espBoxObj[p]=nil end; continue
         end
         if not p.Character or not p.Character:FindFirstChild("HumanoidRootPart") then
-            if espBoxObj[p] then
-                pcall(function()
-                    if espBoxObj[p].box   then espBoxObj[p].box.Visible=false   end
-                    if espBoxObj[p].nameL then espBoxObj[p].nameL.Visible=false end
-                end); espBoxObj[p]=nil
-            end; continue
+            if espBoxObj[p] then pcall(function() if espBoxObj[p].box then espBoxObj[p].box.Visible=false end end); pcall(function() if espBoxObj[p].nameL then espBoxObj[p].nameL.Visible=false end end); espBoxObj[p]=nil end; continue
         end
         if not espBoxObj[p] then
-            local ok1,box=pcall(function() return Drawing.new("Square") end)
-            local ok2,nameL=pcall(function() return Drawing.new("Text") end)
+            local ok1,box=pcall(function() return Drawing.new("Square") end); local ok2,nameL=pcall(function() return Drawing.new("Text") end)
             espBoxObj[p]={box=ok1 and box or nil,nameL=ok2 and nameL or nil}
             if ok1 then box.Thickness=1.5; box.Color=Color3.fromRGB(220,50,50); box.Filled=false; box.Visible=false end
             if ok2 then nameL.Size=13; nameL.Color=Color3.fromRGB(255,160,160); nameL.Outline=true; nameL.Text=p.Name; nameL.Visible=false end
@@ -1170,50 +1146,38 @@ local rsConn=RS.RenderStepped:Connect(function()
         if onScreen and pos2D.Z>0 then
             local dist=(cam.CFrame.Position-head.Position).Magnitude
             local sc=math.clamp(1600/dist,14,120); local bx=pos2D.X-sc*0.5; local by=pos2D.Y-sc*0.8
-            if espBoxObj[p].box   then espBoxObj[p].box.Position=Vector2.new(bx,by);      espBoxObj[p].box.Size=Vector2.new(sc,sc*2); espBoxObj[p].box.Visible=true  end
+            if espBoxObj[p].box   then espBoxObj[p].box.Position=Vector2.new(bx,by);   espBoxObj[p].box.Size=Vector2.new(sc,sc*2); espBoxObj[p].box.Visible=true end
             if espBoxObj[p].nameL then espBoxObj[p].nameL.Position=Vector2.new(bx,by-18); espBoxObj[p].nameL.Visible=true end
         else
-            if espBoxObj[p].box   then espBoxObj[p].box.Visible=false   end
+            if espBoxObj[p].box   then espBoxObj[p].box.Visible=false end
             if espBoxObj[p].nameL then espBoxObj[p].nameL.Visible=false end
         end
     end
-end)
-table.insert(conns,rsConn)
+end))
 
 -- ================================================================
 --  ESP CLEANUP
 -- ================================================================
 PLS.PlayerRemoving:Connect(function(p)
-    if espBoxObj[p] then
-        pcall(function()
-            if espBoxObj[p].box   then espBoxObj[p].box:Remove()   end
-            if espBoxObj[p].nameL then espBoxObj[p].nameL:Remove() end
-        end); espBoxObj[p]=nil
-    end
+    if espBoxObj[p] then pcall(function() if espBoxObj[p].box then espBoxObj[p].box:Remove() end end); pcall(function() if espBoxObj[p].nameL then espBoxObj[p].nameL:Remove() end end); espBoxObj[p]=nil end
 end)
 PLS.PlayerAdded:Connect(function(p)
     p.CharacterRemoving:Connect(function()
-        if espBoxObj[p] then
-            pcall(function()
-                if espBoxObj[p].box   then espBoxObj[p].box.Visible=false   end
-                if espBoxObj[p].nameL then espBoxObj[p].nameL.Visible=false end
-            end); espBoxObj[p]=nil
-        end
+        if espBoxObj[p] then pcall(function() if espBoxObj[p].box then espBoxObj[p].box.Visible=false end end); pcall(function() if espBoxObj[p].nameL then espBoxObj[p].nameL.Visible=false end end); espBoxObj[p]=nil end
     end)
 end)
 
 -- ================================================================
---  STARTUP
+--  STARTUP  (only runs after key passed)
 -- ================================================================
 switchTab("Home")
 while not UIReady do task.wait() end
-task.wait(0.5)
+task.wait(0.4)
 MF.Visible=true; Glow.Visible=true
 
--- Chat startup (3 methods, delay 2s so chat is loaded)
-task.delay(2, function()
-    sendChat("🩸 WDG‐World Demonic Glitch HUB (Basic Mode)  •  Script Loaded  V.1  🩸")
+-- Chat log ONLY after key validated
+task.delay(2,function()
+    sendChat("🩸 WDG HUB (Basic Mode)  •  Script Loaded  V.1  🩸")
 end)
 
--- Startup notification — force=true bypasses cooldown
-notify("🩸  WDG‐World Demonic Glitch HUB  —  Basic Mode", C.red1, "WDG HUB", "🩸", true)
+notify("WDG Hub  --  Basic Mode  --  Access granted",C.red1,"i",4)
